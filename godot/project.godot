@@ -1,0 +1,17 @@
+config_version=5
+
+[application]
+
+config/name="Abysl File Manager"
+run/main_scene="res://main.tscn"
+
+[display]
+
+window/size/viewport_width=800
+window/size/viewport_height=450
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

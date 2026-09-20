@@ -1,0 +1,3 @@
+[submodule "deps/spirit2"]
+	path = deps/spirit2
+	url = https://github.com/abysl/spirit-library2.git
