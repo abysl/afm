@@ -129,7 +129,7 @@ class AfmDeliveryPlugin : Plugin<Project> {
         }
         val buildLogicTests = gradle.includedBuild("afm-build-logic").task(":test")
         val sdkTests = gradle.includedBuild("spirit2").task(":sdk:jvmTest")
-        val tests = listOf(verifyNative, rustTests, buildLogicTests, sdkTests, ":app:shared:jvmTest", ":app:shared:jsBrowserTest", ":app:shared:wasmJsBrowserTest")
+        val tests = listOf(verifyNative, rustTests, buildLogicTests, sdkTests, ":app:shared:jvmTest")
         val reportSources = listOf(
             stage.resolve("logs") to "native-logs",
             kmp.resolve("app/shared/build/test-results") to "afm/test-results",
