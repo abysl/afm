@@ -89,7 +89,10 @@ class GitSources(
 
     private fun git(directory: Path, vararg arguments: String): String {
         val result = commands.run(listOf("git", *arguments), directory, sanitizedBuildEnvironment(environment))
-        if (result.exitCode != 0) throw DeliveryException("Git source verification failed")
+        if (result.exitCode != 0) {
+            val detail = result.output.trim().take(4096).ifEmpty { "no output" }
+            throw DeliveryException("Git source verification failed for ${arguments.joinToString(" ")}: $detail")
+        }
         return result.output.trim()
     }
 
