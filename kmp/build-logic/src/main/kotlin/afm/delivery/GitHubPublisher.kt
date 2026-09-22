@@ -297,9 +297,20 @@ class GitHubPublisher(
     }
 
     private fun downloadStream(asset: ReleaseAsset, consume: (InputStream) -> Unit) {
-        var uri = publicUri(asset.url)
+        var uri = apiUri(asset.url.toString())
+        var authenticated = true
         repeat(githubMaximumRedirects + 1) { attempt ->
-            val request = HttpRequest.newBuilder(uri).GET().timeout(Duration.ofSeconds(githubTimeoutSeconds)).build()
+            val request = if (authenticated) {
+                HttpRequest.newBuilder(uri)
+                    .GET()
+                    .timeout(Duration.ofSeconds(githubTimeoutSeconds))
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept", "application/octet-stream")
+                    .header("User-Agent", "afm-delivery-publisher")
+                    .build()
+            } else {
+                HttpRequest.newBuilder(uri).GET().timeout(Duration.ofSeconds(githubTimeoutSeconds)).build()
+            }
             val response = send(request)
             when {
                 response.statusCode() == 200 -> {
@@ -310,6 +321,7 @@ class GitHubPublisher(
                     response.body().close()
                     val location = response.headers().firstValue("Location").orElseThrow { DeliveryException("Release asset redirect is missing a location") }
                     uri = publicUri(uri.resolve(location))
+                    authenticated = false
                 }
                 else -> {
                     response.body().close()
@@ -418,7 +430,7 @@ class GitHubPublisher(
         val id = root["id"]?.jsonPrimitive?.longOrNull ?: throw DeliveryException("GitHub release asset has no id")
         val name = root["name"]?.jsonPrimitive?.contentOrNull ?: throw DeliveryException("GitHub release asset has no name")
         val size = root["size"]?.jsonPrimitive?.longOrNull ?: throw DeliveryException("GitHub release asset has no size")
-        val url = root["browser_download_url"]?.jsonPrimitive?.contentOrNull ?: throw DeliveryException("GitHub release asset has no public URL")
+        val url = root["url"]?.jsonPrimitive?.contentOrNull ?: throw DeliveryException("GitHub release asset has no API URL")
         if (size !in 0..2L * 1024 * 1024 * 1024) throw DeliveryException("GitHub release asset size is invalid")
         val uri = try {
             URI(url)
