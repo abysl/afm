@@ -324,6 +324,7 @@ class GitHubPublisherTest {
                     put("id", JsonPrimitive(asset.id))
                     put("name", JsonPrimitive(asset.name))
                     put("size", JsonPrimitive(asset.bytes.size))
+                    put("url", JsonPrimitive("${origin()}/assets/${asset.id}"))
                     put("browser_download_url", JsonPrimitive("${origin()}/assets/${asset.id}"))
                 })
             } })
