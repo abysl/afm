@@ -1,6 +1,7 @@
 package afm.delivery
 
 import java.nio.file.Files
+import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.Path
 import kotlinx.serialization.json.*
 
@@ -121,6 +122,12 @@ class GitSources(
                 throw DeliveryException("Refusing to update an existing dirty or mismatched Spirit2 checkout; use a fresh CI workspace")
             }
         } else {
+            if (Files.exists(spirit, NOFOLLOW_LINKS)) {
+                if (environment["AFM_CI_CLEAN_SUBMODULE"] != "1" || Files.isSymbolicLink(spirit)) {
+                    throw DeliveryException("Pinned Spirit2 directory is incomplete; use a fresh CI workspace")
+                }
+                deleteTree(spirit)
+            }
             git(repository, "submodule", "update", "--init", "--checkout", "--", submodule)
         }
         if (git(spirit, "rev-parse", "HEAD") != expected) throw DeliveryException("Spirit2 checkout does not match the gitlink")
@@ -137,6 +144,10 @@ class GitSources(
             throw DeliveryException("Delivery requires clean tracked source files")
         }
         return SourceContext(ReleaseSource(commit, dependency), ReleaseVersions.release(repository, git(repository, "rev-list", "--count", "HEAD")))
+    }
+
+    private fun deleteTree(path: Path) {
+        Files.walk(path).use { entries -> entries.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
     }
 }
 

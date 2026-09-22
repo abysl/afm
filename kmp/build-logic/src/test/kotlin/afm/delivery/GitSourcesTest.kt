@@ -132,6 +132,40 @@ class GitSourcesTest {
     }
 
     @Test
+    fun `incomplete dependency is only cleaned in the explicit disposable CI mode`() {
+        val kmp = root.resolve("kmp")
+        val spirit = root.resolve("deps/spirit2")
+        Files.createDirectories(kmp)
+        Files.createDirectories(spirit)
+        Files.writeString(spirit.resolve("failed-clone"), "partial")
+        val commit = "a".repeat(40)
+        val dependency = "b".repeat(40)
+        val base = mapOf("CI_PIPELINE_EVENT" to "push", "CI_COMMIT_BRANCH" to "main", "CI_COMMIT_SHA" to commit)
+        val blockedAnswers = ArrayDeque(listOf(root.toString(), commit, "160000 commit $dependency\tdeps/spirit2"))
+        val blocked = CommandRunner { command, _, _ ->
+            if ("submodule" in command) error("submodule update must not run")
+            else CommandResult(0, blockedAnswers.removeFirst())
+        }
+        assertThrows(DeliveryException::class.java) { GitSources(kmp, blocked, base).prepare() }
+        assertTrue(Files.exists(spirit.resolve("failed-clone")))
+        val calls = mutableListOf<List<String>>()
+        val runner = CommandRunner { command, directory, _ ->
+            calls += command
+            val output = when {
+                command.contains("--show-toplevel") -> root.toString()
+                command.contains("ls-tree") -> "160000 commit $dependency\tdeps/spirit2"
+                command.takeLast(2) == listOf("rev-parse", "HEAD") && directory == spirit -> dependency
+                command.takeLast(2) == listOf("rev-parse", "HEAD") -> commit
+                else -> ""
+            }
+            CommandResult(0, output)
+        }
+        GitSources(kmp, runner, base + ("AFM_CI_CLEAN_SUBMODULE" to "1")).prepare()
+        assertFalse(Files.exists(spirit))
+        assertTrue(calls.contains(listOf("git", "submodule", "update", "--init", "--checkout", "--", "deps/spirit2")))
+    }
+
+    @Test
     fun `bootstrap initializes only the named dependency without force or recursion`() {
         val kmp = root.resolve("kmp")
         Files.createDirectories(kmp)
