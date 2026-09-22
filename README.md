@@ -21,7 +21,7 @@ checkout or replace its pin with a moving branch implicitly.
 ## One development shell
 
 From the repository root, enter `devenv shell` or enable direnv with `direnv allow`.
-Each command enters its own child environment with the correct project directory:
+Each command enters its own child environment with the correct project directory. Web remains a local UI-only experiment and is not part of the signed prerelease channel:
 
 ```sh
 devenv shell -- run-desktop
@@ -60,9 +60,10 @@ there is no debug-key fallback. Keep one backed-up signing identity for upgrades
 The intended delivery path is GitHub main → a private Forgejo pull mirror →
 self-hosted Woodpecker → versioned signed GitHub prereleases. No GitHub Actions
 runner is required. Every successful non-superseded main build publishes immutable
-`v0.1.N` prerelease assets after draft upload/verification; stale and partial builds
-never advance the testing channel. Obtainium sorts the numeric tags with prerelease
-support enabled. Deployment configuration and credentials remain outside this
+`v0.1.N` prerelease Android and Linux assets after draft upload/verification; stale
+and partial builds never advance the testing channel. Obtainium sorts the numeric
+tags with prerelease support enabled. Web artifact publication is deferred until
+both browser targets are functionally useful and pass their own CI acceptance. Deployment configuration and credentials remain outside this
 repository. See the [delivery design](wiki/design/delivery.md) for exact version,
 asset, retry, and phone-update contracts.
 

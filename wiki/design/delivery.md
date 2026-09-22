@@ -24,7 +24,7 @@ Run from `kmp/` in its devenv environment. The CI runner provides event metadata
 | `./gradlew -p build-logic prepareSpirit2 --no-configuration-cache` | Initialize only the pinned Spirit2 checkout; reject dirty/mismatched existing checkouts |
 | `./gradlew afmDeliveryPreflight -PafmRelease=true --no-daemon --no-configuration-cache` | Require trusted main, exact clean source/pin, full history, and delivery credentials |
 | `./gradlew afmPrepareNative -PafmRelease=true --no-configuration-cache` | Build host Rust/UniFFI, generate Kotlin, build both Android native ABIs, record source context |
-| `./gradlew afmCiBuild -PafmRelease=true --no-configuration-cache` | Test the delivery logic, Kotlin launcher/aliases, Rust, SDK, AFM JVM and browsers; build unsigned APK/AAB and Linux `.deb`; archive reports |
+| `./gradlew afmCiBuild -PafmRelease=true --no-configuration-cache` | Test delivery logic, Kotlin launcher/aliases, Rust, SDK, and AFM JVM; build unsigned APK/AAB and Linux `.deb`; archive reports |
 | `./gradlew afmDeliver -PafmRelease=true --no-daemon --no-configuration-cache` | Restore an existing verified bundle or sign/package locally, then publish and conditionally promote latest |
 
 Native preparation is a separate invocation because the included SDK needs its
@@ -176,7 +176,9 @@ an Android version or replacing an already published APK.
 release for its exact AFM commit. It uploads only the signed universal APK, Linux
 Debian package, generated `SHA256SUMS`, and generated `release-metadata.json`.
 Private CI reports/logs, Forgejo internals, keystores, and source workspaces are
-not public assets. It verifies every uploaded asset before the final main-commit
+not public assets. Web JS/Wasm artifacts and browser acceptance are deferred: the
+browser UI currently has no native store/transfer backend, and a browser failure
+must not block the Android/Linux phone-testing channel. It verifies every uploaded asset before the final main-commit
 check and draft publication. Existing conflicting published releases are rejected;
 partial uploads remain retriable drafts.
 
