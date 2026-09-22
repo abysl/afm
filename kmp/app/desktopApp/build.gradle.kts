@@ -36,6 +36,7 @@ compose.desktop {
             packageVersion = afmVersionName
             modules("java.se", "jdk.unsupported", "jdk.crypto.cryptoki", "jdk.localedata", "jdk.charsets", "jdk.zipfs")
             linux {
+                iconFile.set(project.file("src/main/resources/abysl-profile.png"))
                 packageName = "afm"
             }
         }
