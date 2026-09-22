@@ -5,6 +5,9 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
+val afmVersionCode: Int by rootProject.extra
+val afmVersionName: String by rootProject.extra
+
 kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_11
@@ -22,13 +25,14 @@ dependencies {
 android {
     namespace = "com.abysl.afm"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
+    ndkVersion = libs.versions.android.ndkVersion.get()
 
     defaultConfig {
         applicationId = "com.abysl.afm"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = afmVersionCode
+        versionName = afmVersionName
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }

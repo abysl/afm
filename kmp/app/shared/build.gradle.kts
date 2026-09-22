@@ -40,12 +40,26 @@ kotlin {
     jvmToolchain(25)
 
     js {
-        browser()
+        browser {
+            testTask {
+                useKarma {
+                    if (providers.environmentVariable("AFM_CI_CONTAINER").orNull == "1") useChromeHeadlessNoSandbox()
+                    else useChromeHeadless()
+                }
+            }
+        }
     }
 
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
-        browser()
+        browser {
+            testTask {
+                useKarma {
+                    if (providers.environmentVariable("AFM_CI_CONTAINER").orNull == "1") useChromeHeadlessNoSandbox()
+                    else useChromeHeadless()
+                }
+            }
+        }
     }
 
     android {
@@ -97,6 +111,12 @@ kotlin {
         }
         jvmTest.dependencies {
             implementation(libs.kotlinx.coroutinesCore)
+        }
+        named("androidDeviceTest") {
+            dependencies {
+                implementation(libs.androidx.testExt.junit)
+                implementation(libs.kotlinx.coroutinesCore)
+            }
         }
         jsMain.dependencies {
             implementation(libs.wrappers.browser)

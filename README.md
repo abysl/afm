@@ -1,72 +1,99 @@
 # Abysl File Manager
 
-AFM is a Compose Multiplatform file manager backed by Spirit2. The active app lives in `kmp/`; `bevy/` and `godot/` are earlier feature-flow prototypes, not release targets.
+AFM is a Compose Multiplatform file manager backed by Spirit2. The active app is
+`kmp/`; `bevy/` and `godot/` are independent feature-flow prototypes. The current
+app demonstrates native content-addressed storage. The first cross-device
+file-manager UX and real file transfer remain on the
+[project roadmap](plans/first-file-transfer/plan.md).
 
 ## Checkout
 
 ```sh
-git clone --recurse-submodules git@github.com:abysl/afm.git
+git clone --recurse-submodules https://github.com/abysl/afm.git
 cd afm
 ```
 
-`deps/spirit2` pins the SDK and native library to an exact commit. Both repositories currently require GitHub access. After pulling changes, run `git submodule update --init --recursive`; do not replace the pin with the latest SDK branch.
+`deps/spirit2` is an independent Git submodule pinned to an exact SDK/native
+revision. After changing an AFM revision, inspect dependency state before running
+`git submodule update --init -- deps/spirit2`. Never reset an active dependency
+checkout or replace its pin with a moving branch implicitly.
 
-## Develop
+## One development shell
 
-With Nix and devenv installed:
+From the repository root, enter `devenv shell` or enable direnv with `direnv allow`.
+Each command enters its own child environment with the correct project directory:
 
 ```sh
-cd kmp
-direnv allow
-unit-test
-desktop
+devenv shell -- run-desktop
+devenv shell -- run-android
+devenv shell -- run-cli --help
+devenv shell -- run-web
+devenv shell -- run-bevy
+devenv shell -- run-godot
+devenv shell -- test-plumbing
+devenv shell -- release-desktop
 ```
 
-The development environment generates UniFFI bindings and builds the native library before launching. See [the app guide](kmp/app/README.md) for individual Gradle targets.
+The root derives KMP's public run/test/release commands from its
+[command matrix](kmp/README.md#run-test-release-matrix). Bevy and Godot also
+provide `test-bevy`, `release-bevy`, `edit-godot`, and `test-godot`. Godot release
+exports need an export preset and are not configured. Browser builds are UI-only:
+the current UniFFI/JNA native store is available on JVM desktop and Android.
 
-## Main builds
+## Build and release ownership
 
-A private Forgejo pull mirror follows GitHub `main`. Woodpecker compiles and tests on self-hosted Linux runners, then publishes a GitHub prerelease named for the full source commit. No GitHub Actions runner is used.
+Gradle Kotlin DSL and tested Kotlin JVM build logic own native preparation,
+Android launching, tests, versioning, signing, manifests, and artifact publication.
+Cargo owns Rust builds; UniFFI generates the SDK bindings. There is no Python
+build or release path. See [build-logic](kmp/build-logic/README.md).
 
-The release is kept as a draft until every asset and its checksum has uploaded successfully. Downloads are available on [GitHub Releases](https://github.com/abysl/afm/releases), not the GitHub Actions artifact store.
+Normal development versions remain `1` / `1.0.0`. Trusted CI releases use the
+checked-in `release-version-base.txt` plus all reachable AFM commits, so extracting
+source history cannot lower Android version codes. Do not lower that base or
+rewrite published release history. Release manifests identify this repository's
+commit as `source.afm_commit` and use schema 2.
 
-| Asset | Contents |
-|---|---|
-| `afm-linux-x86_64.deb` | Linux x86-64 desktop installer with a bundled Java runtime; built on Ubuntu 24.04 |
-| `afm-android-unsigned.apk` | Release APK with ARM64 and x86-64 native libraries; **must be signed before installation** |
-| `afm-web.tar.gz` | `js/` and `wasmJs/` static web distributions |
-| `SHA256SUMS` | SHA-256 checksums for the three downloads |
+Release aliases produce local artifacts, not automatic public releases. Android
+release APKs are unsigned until explicitly processed by the protected signing task;
+there is no debug-key fallback. Keep one backed-up signing identity for upgrades.
 
-Web and iOS currently expose the UI without the native store. macOS, Windows, and iOS packages are not part of this Linux pipeline. Main builds are development prereleases, not stable versioned releases.
+The intended delivery path is GitHub main → a private Forgejo pull mirror →
+self-hosted Woodpecker → signed release downloads. Deployment configuration and
+credentials are managed outside this repository. The final GitHub Release publisher
+and live signed-release acceptance remain deployment work, not a claim made by
+this source port. No GitHub Actions runner is required. The
+[delivery design](wiki/design/delivery.md) defines the task/credential contracts.
 
-The pipeline runs shared JVM tests, which load the native Spirit library, before packaging. Packaging also verifies both Android native libraries and both web entry points.
+## Disposable Linux CI environment
 
-## Reproduce the Linux build
+`ci/setup-linux.sh` prepares a disposable Ubuntu root container with JDK 25
+already installed, for example `eclipse-temurin:25-jdk-noble`. Do not run this
+script directly on a developer host: it installs system packages and accepts
+Android SDK licenses inside the container.
 
-Use the same `eclipse-temurin:25-jdk-noble` container as CI, from an initialized checkout:
+From an initialized checkout:
 
 ```sh
-docker run --rm -v "$PWD:/workspace" -w /workspace \
+docker run --rm --shm-size=1g -v "$PWD:/workspace" -w /workspace \
   eclipse-temurin:25-jdk-noble \
-  bash -c 'bash ci/setup-linux.sh && bash ci/build-release.sh'
+  bash -c 'bash ci/setup-linux.sh && source ci/environment.sh && bash kmp/gradlew -p kmp afmPrepareNative --no-configuration-cache'
 ```
 
-This installs build tools inside the container and keeps downloaded toolchains and build output under the ignored `.ci/`, dependency build directories, and `dist/`. Container output is owned by root. The setup accepts the Android SDK licenses for the container; review those licenses before running it.
+Continue with the Gradle test/package tasks described in the command matrix.
+Protected delivery tasks require trusted-main CI metadata and signing/publication
+secrets; the example does not publish anything. Build portable Linux installers
+in the disposable distribution environment rather than assuming a runtime linked
+to a developer's Nix store will work on another machine. Container output is
+owned by root; caches/toolchains live under ignored `.ci/` and build directories.
 
-Rust 1.98.1, cargo-ndk 4.1.2, Android API 36, and NDK 26.3.11579264 match the pinned SDK. Gradle downloads its own web tools outside devenv. Native Linux packaging deliberately uses Ubuntu rather than Nix so the shipped runtime does not depend on a runner's `/nix/store`.
-
-Run lightweight packaging regression tests without the compiler toolchains:
-
-```sh
-python3 -m unittest discover -s ci -p '*_test.py'
-```
-
-AFM is organized by implementation dependency while the feature flows are being explored.
+## Layout
 
 | Directory | Role |
-|---|---|
-| `godot/` | Godot hello world |
-| `bevy/` | Bevy hello world |
-| `kmp/` | Kotlin Multiplatform client backed by Spirit2 |
-
-Each implementation is an independent starting point for exploring the same asset-management workflows.
+| --- | --- |
+| `kmp/` | Active Kotlin Multiplatform app and Gradle build logic |
+| `deps/spirit2/` | Pinned SDK and Rust core dependency |
+| `ci/` | Thin disposable-container environment bootstrap |
+| `bevy/` | Bevy feature-flow prototype |
+| `godot/` | Godot feature-flow prototype |
+| `wiki/design/` | Current architecture and release contracts |
+| `plans/` | Project implementation roadmap |
