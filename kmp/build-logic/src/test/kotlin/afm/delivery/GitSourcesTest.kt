@@ -11,9 +11,9 @@ class GitSourcesTest {
 
     @Test
     fun `versions require a complete valid pair`() {
-        assertEquals(ReleaseVersion("1.0.0", 1), ReleaseVersions.development(null, null))
-        assertEquals(ReleaseVersion("1.0.42", 42), ReleaseVersions.development("42", "1.0.42"))
-        listOf(null to "1.0.42", "42" to null, "0" to "1.0.0", "2100000001" to "1.0.0", "42" to "1.00.42").forEach { (code, name) ->
+        assertEquals(ReleaseVersion("0.1.0", 1), ReleaseVersions.development(null, null))
+        assertEquals(ReleaseVersion("0.1.42", 42), ReleaseVersions.development("42", "0.1.42"))
+        listOf(null to "0.1.42", "42" to null, "0" to "0.1.0", "2100000001" to "0.1.0", "42" to "1.00.42").forEach { (code, name) ->
             assertThrows(DeliveryException::class.java) { ReleaseVersions.development(code, name) }
         }
     }
@@ -23,7 +23,7 @@ class GitSourcesTest {
         Files.writeString(root.resolve("release-version-base.txt"), "1752\n")
         val version = ReleaseVersions.release(root, "123")
 
-        assertEquals(ReleaseVersion("1.0.1875", 1875), version)
+        assertEquals(ReleaseVersion("0.1.1875", 1875), version)
     }
 
     @Test
@@ -46,7 +46,7 @@ class GitSourcesTest {
 
     @Test
     fun `source contexts persist AFM provenance`() {
-        val context = SourceContext(ReleaseSource("a".repeat(40), "b".repeat(40)), ReleaseVersion("1.0.1753", 1753))
+        val context = SourceContext(ReleaseSource("a".repeat(40), "b".repeat(40)), ReleaseVersion("0.1.1753", 1753))
         val path = root.resolve("context.json")
 
         context.write(path)
@@ -81,7 +81,7 @@ class GitSourcesTest {
         val kmp = Files.createDirectories(root.resolve("kmp"))
         val context = GitSources(kmp, runner, mapOf("CI_COMMIT_SHA" to commit)).context()
         assertEquals(ReleaseSource(commit, dependency), context.source)
-        assertEquals(ReleaseVersion("1.0.1875", 1875), context.version)
+        assertEquals(ReleaseVersion("0.1.1875", 1875), context.version)
         assertEquals(listOf("git", "rev-list", "--count", "HEAD"), calls.last())
         assertTrue(answers.isEmpty())
     }
@@ -148,9 +148,11 @@ class GitSourcesTest {
 
     @Test
     fun `build tools never inherit delivery secrets`() {
-        val environment = sanitizedBuildEnvironment(mapOf("AFM_KEYSTORE_PASSWORD" to "secret", "AFM_FORGEJO_TOKEN" to "token", "ANDROID_NDK_ROOT" to "/ndk", "PATH" to "/tools"))
+        val environment = sanitizedBuildEnvironment(mapOf("AFM_KEYSTORE_PASSWORD" to "secret", "AFM_FORGEJO_TOKEN" to "token", "GH_TOKEN" to "github", "GITHUB_TOKEN" to "github-alias", "ANDROID_NDK_ROOT" to "/ndk", "PATH" to "/tools"))
         assertFalse(environment.containsKey("AFM_KEYSTORE_PASSWORD"))
         assertFalse(environment.containsKey("AFM_FORGEJO_TOKEN"))
+        assertFalse(environment.containsKey("GH_TOKEN"))
+        assertFalse(environment.containsKey("GITHUB_TOKEN"))
         assertEquals("/ndk", environment["ANDROID_NDK_HOME"])
         assertEquals("/tools", environment["PATH"])
     }

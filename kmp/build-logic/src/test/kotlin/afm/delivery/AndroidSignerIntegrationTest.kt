@@ -32,10 +32,10 @@ class AndroidSignerIntegrationTest {
             "AFM_KEY_PASSWORD" to password,
         )
         val output = root.resolve("signed.apk")
-        val metadata = AndroidSigner(runner).sign(Path.of(System.getenv("AFM_SIGNING_SMOKE_APK")), output, 42, "1.0.42", signing)
+        val metadata = AndroidSigner(runner).sign(Path.of(System.getenv("AFM_SIGNING_SMOKE_APK")), output, 42, "0.1.42", signing)
         assertEquals("com.abysl.afm", metadata.applicationId)
         assertEquals(42, metadata.versionCode)
-        assertEquals("1.0.42", metadata.versionName)
+        assertEquals("0.1.42", metadata.versionName)
         assertTrue(Regex("[0-9a-f]{64}").matches(metadata.certificateSha256))
         assertTrue(Files.size(output) > 0)
     }

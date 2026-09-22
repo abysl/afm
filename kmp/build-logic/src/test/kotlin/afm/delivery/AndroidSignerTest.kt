@@ -28,9 +28,9 @@ class AndroidSignerTest {
         val input = unsignedApk()
         val output = root.resolve("signed.apk")
 
-        val metadata = signer(runner).sign(input, output, 42, "1.0.42", environment())
+        val metadata = signer(runner).sign(input, output, 42, "0.1.42", environment())
 
-        assertEquals(SigningMetadata("com.abysl.afm", 42, "1.0.42", "ab".repeat(32)), metadata)
+        assertEquals(SigningMetadata("com.abysl.afm", 42, "0.1.42", "ab".repeat(32)), metadata)
         assertTrue(output.isRegularFile())
         assertEquals("unsigned", input.readBytes().decodeToString())
         val arguments = runner.calls.flatMap { it.command }
@@ -41,8 +41,31 @@ class AndroidSignerTest {
             assertFalse(call.environment.containsKey("AFM_KEYSTORE_BASE64"))
             assertFalse(call.environment.containsKey("AFM_KEY_ALIAS"))
             assertFalse(call.environment.containsKey("AFM_FORGEJO_TOKEN"))
-            assertEquals("store-password", call.environment["AFM_KEYSTORE_PASSWORD"])
-            assertEquals("key-password", call.environment["AFM_KEY_PASSWORD"])
+            assertFalse(call.environment.containsKey("GH_TOKEN"))
+            assertFalse(call.environment.containsKey("GITHUB_TOKEN"))
+            if (call.command[1] == "sign") {
+                assertEquals("store-password", call.environment["AFM_KEYSTORE_PASSWORD"])
+                assertEquals("key-password", call.environment["AFM_KEY_PASSWORD"])
+            } else {
+                assertFalse(call.environment.containsKey("AFM_KEYSTORE_PASSWORD"))
+                assertFalse(call.environment.containsKey("AFM_KEY_PASSWORD"))
+            }
+        }
+    }
+
+    @Test
+    fun verifiesAnExistingApkWithoutSigningCredentials() {
+        val output = root.resolve("signed.apk")
+        signer(FakeCommands()).sign(unsignedApk(), output, 42, "0.1.42", environment())
+        val runner = FakeCommands()
+        val noSecrets = environment().filterKeys { it !in setOf("AFM_KEYSTORE_BASE64", "AFM_KEYSTORE_PASSWORD", "AFM_KEY_ALIAS", "AFM_KEY_PASSWORD") }
+        val metadata = signer(runner).verify(output, 42, "0.1.42", noSecrets)
+        assertEquals("ab".repeat(32), metadata.certificateSha256)
+        assertEquals(listOf("verify", "dump"), runner.calls.map { it.command[1] })
+        assertTrue(runner.keystores.isEmpty())
+        runner.calls.forEach {
+            assertFalse(it.environment.containsKey("GH_TOKEN"))
+            assertFalse(it.environment.containsKey("AFM_KEYSTORE_PASSWORD"))
         }
     }
 
@@ -53,10 +76,10 @@ class AndroidSignerTest {
             val output = root.resolve("$failure.apk")
 
             if (failure == null) {
-                signer(runner).sign(unsignedApk(), output, 42, "1.0.42", environment())
+                signer(runner).sign(unsignedApk(), output, 42, "0.1.42", environment())
             } else {
                 assertThrows(DeliveryException::class.java) {
-                    signer(runner).sign(unsignedApk(), output, 42, "1.0.42", environment())
+                    signer(runner).sign(unsignedApk(), output, 42, "0.1.42", environment())
                 }
             }
 
@@ -78,7 +101,7 @@ class AndroidSignerTest {
             val runner = FakeCommands()
 
             assertThrows(DeliveryException::class.java) {
-                signer(runner).sign(unsignedApk(), root.resolve("signed.apk"), 42, "1.0.42", secrets)
+                signer(runner).sign(unsignedApk(), root.resolve("signed.apk"), 42, "0.1.42", secrets)
             }
 
             assertTrue(runner.calls.isEmpty())
@@ -87,7 +110,7 @@ class AndroidSignerTest {
 
     @Test
     fun rejectsInvalidVersionsBeforeRunningTools() {
-        listOf(0 to "1.0.0", 2_100_000_001 to "1.0.0", 42 to "1.0", 42 to "1.00.0").forEach { (code, name) ->
+        listOf(0 to "0.1.0", 2_100_000_001 to "0.1.0", 42 to "1.0", 42 to "1.00.0").forEach { (code, name) ->
             val runner = FakeCommands()
 
             assertThrows(DeliveryException::class.java) {
@@ -104,7 +127,7 @@ class AndroidSignerTest {
             val runner = FakeCommands(failure = failure)
             val output = root.resolve("$failure.apk")
             val error = assertThrows(DeliveryException::class.java) {
-                signer(runner).sign(unsignedApk(), output, 42, "1.0.42", environment())
+                signer(runner).sign(unsignedApk(), output, 42, "0.1.42", environment())
             }
 
             assertFalse(output.exists())
@@ -119,13 +142,13 @@ class AndroidSignerTest {
             FakeCommands(certificate = "not-a-digest"),
             FakeCommands(applicationId = "other.application"),
             FakeCommands(versionCode = "43"),
-            FakeCommands(versionName = "1.0.43"),
+            FakeCommands(versionName = "0.1.43"),
             FakeCommands(nativeEntries = setOf("lib/arm64-v8a/libspirit_ffi.so")),
         ).forEachIndexed { index, runner ->
             val output = root.resolve("rejected-$index.apk")
 
             assertThrows(DeliveryException::class.java) {
-                signer(runner).sign(unsignedApk(), output, 42, "1.0.42", environment())
+                signer(runner).sign(unsignedApk(), output, 42, "0.1.42", environment())
             }
 
             assertFalse(output.exists())
@@ -145,7 +168,7 @@ class AndroidSignerTest {
             unsignedApk(),
             root.resolve("signed.apk"),
             42,
-            "1.0.42",
+            "0.1.42",
             environment().plus("AFM_ANDROID_BUILD_TOOLS" to tools.toString()),
         )
 
@@ -164,6 +187,8 @@ class AndroidSignerTest {
         "AFM_KEY_ALIAS" to "release",
         "AFM_KEY_PASSWORD" to "key-password",
         "AFM_FORGEJO_TOKEN" to "forgejo-token",
+        "GH_TOKEN" to "github-token",
+        "GITHUB_TOKEN" to "other-github-token",
         "AFM_ANDROID_BUILD_TOOLS" to buildTools().toString(),
     )
 
@@ -183,7 +208,7 @@ class AndroidSignerTest {
         private val certificate: String = "ab".repeat(32),
         private val applicationId: String = "com.abysl.afm",
         private val versionCode: String = "42",
-        private val versionName: String = "1.0.42",
+        private val versionName: String = "0.1.42",
         private val nativeEntries: Set<String> = setOf(
             "lib/arm64-v8a/libspirit_ffi.so",
             "lib/x86_64/libspirit_ffi.so",

@@ -11,7 +11,7 @@ object ReleaseVersions {
     private val namePattern = Regex("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)")
 
     fun development(code: String?, name: String?): ReleaseVersion {
-        if (code == null && name == null) return ReleaseVersion("1.0.0", 1)
+        if (code == null && name == null) return ReleaseVersion("0.1.0", 1)
         if (code == null || name == null) throw DeliveryException("AFM_VERSION_CODE and AFM_VERSION_NAME must be set together")
         val value = code.toIntOrNull()
         if (!codePattern.matches(code) || value == null || value !in 1..maximumCode.toInt()) {
@@ -30,7 +30,7 @@ object ReleaseVersions {
         }
         val code = base + count
         if (code !in 1..maximumCode) throw DeliveryException("Release version code must be in 1..$maximumCode")
-        return ReleaseVersion("1.0.$code", code.toInt())
+        return ReleaseVersion("0.1.$code", code.toInt())
     }
 
     private fun releaseBase(repository: Path): Long {
@@ -88,7 +88,7 @@ class GitSources(
     private val submodule = "deps/spirit2"
 
     private fun git(directory: Path, vararg arguments: String): String {
-        val result = commands.run(listOf("git", *arguments), directory, environment)
+        val result = commands.run(listOf("git", *arguments), directory, sanitizedBuildEnvironment(environment))
         if (result.exitCode != 0) throw DeliveryException("Git source verification failed")
         return result.output.trim()
     }

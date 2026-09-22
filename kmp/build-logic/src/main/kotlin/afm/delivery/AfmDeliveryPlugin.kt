@@ -175,7 +175,7 @@ class AfmDeliveryPlugin : Plugin<Project> {
         }
         tasks.register("afmDeliver") {
             group = "delivery"
-            description = "Sign and publish a verified bundle, or restore the existing immutable bundle"
+            description = "Sign and publish a verified internal bundle, or restore the existing immutable bundle"
             notCompatibleWithConfigurationCache("Signing and publication must never cache credentials or side effects")
             doLast {
                 val context = deliveryContext()
@@ -193,20 +193,31 @@ class AfmDeliveryPlugin : Plugin<Project> {
                 logger.lifecycle(publisher.publish(bundle, context.source.afmCommit))
             }
         }
+        tasks.register("afmPublishGitHub") {
+            group = "delivery"
+            description = "Publish a verified signed AFM development prerelease to GitHub"
+            notCompatibleWithConfigurationCache("GitHub credentials and publication side effects must not be cached")
+            doLast {
+                val context = deliveryContext()
+                val bundle = stage.resolve("bundle")
+                val manifest = ReleaseManifest.read(bundle.resolve("delivery.json"))
+                if (manifest.source != context.source || manifest.version != context.version) {
+                    throw DeliveryException("Internal artifact provenance does not match the current source context")
+                }
+                if (manifest.version.name != "0.1.${manifest.version.code}") {
+                    throw DeliveryException("Development prerelease version must be 0.1.<versionCode>")
+                }
+                val signedApk = manifest.artifacts.singleOrNull { it.name.endsWith(".apk") }
+                    ?: throw DeliveryException("Internal bundle must contain one signed APK")
+                AndroidSigner().verify(bundle.resolve(signedApk.name), manifest.version.code, manifest.version.name, System.getenv())
+                logger.lifecycle(githubPublisher().publish(bundle, context.source.afmCommit))
+            }
+        }
     }
 }
 
-private val signingKeys = setOf("AFM_KEYSTORE_BASE64", "AFM_KEYSTORE_PASSWORD", "AFM_KEY_ALIAS", "AFM_KEY_PASSWORD")
-
-fun sanitizedBuildEnvironment(environment: Map<String, String>): Map<String, String> {
-    val clean = environment.filterKeys { it !in signingKeys && it != "AFM_FORGEJO_TOKEN" }
-    return if (clean["ANDROID_NDK_HOME"].isNullOrBlank() && !clean["ANDROID_NDK_ROOT"].isNullOrBlank()) {
-        clean + ("ANDROID_NDK_HOME" to clean.getValue("ANDROID_NDK_ROOT"))
-    } else clean
-}
-
 private fun requireSigningCredentials(environment: Map<String, String>) {
-    if (signingKeys.any { environment[it].isNullOrBlank() }) throw DeliveryException("Configure all four AFM signing secrets; there is no debug-signing fallback")
+    if (signingSecretNames.any { environment[it].isNullOrBlank() }) throw DeliveryException("Configure all four AFM signing secrets; there is no debug-signing fallback")
 }
 
 private fun publisher(): ForgejoPublisher {
@@ -214,6 +225,13 @@ private fun publisher(): ForgejoPublisher {
     val cache = System.getenv("XDG_CACHE_HOME")?.let(Path::of) ?: Path.of(System.getProperty("user.home"), ".cache")
     val lock = System.getenv("AFM_PUBLISH_LOCK")?.let(Path::of) ?: cache.resolve("afm-delivery/publish.lock")
     return ForgejoPublisher(URI(required("AFM_PACKAGE_BASE")), URI(required("AFM_REPOSITORY_API")), required("AFM_FORGEJO_TOKEN"), lock)
+}
+
+private fun githubPublisher(): GitHubPublisher {
+    fun required(name: String) = System.getenv(name)?.takeIf { it.isNotBlank() } ?: throw DeliveryException("$name is required")
+    val cache = System.getenv("XDG_CACHE_HOME")?.let(Path::of) ?: Path.of(System.getProperty("user.home"), ".cache")
+    val lock = System.getenv("AFM_GITHUB_PUBLISH_LOCK")?.let(Path::of) ?: cache.resolve("afm-delivery/github-release.lock")
+    return GitHubPublisher(required("AFM_GITHUB_REPOSITORY"), required("GH_TOKEN"), lock)
 }
 
 private fun oneFile(directory: Path, glob: String, label: String): Path {

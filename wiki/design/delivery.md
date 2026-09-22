@@ -47,9 +47,9 @@ the minimal Ubuntu container. A green container suite alone is not alias validat
 
 ## Version and signing contract
 
-CI Android `versionCode` is the checked-in `release-version-base.txt` value plus
+Development prerelease Android `versionCode` is the checked-in `release-version-base.txt` value plus
 `git rev-list --count HEAD` in this AFM repository. `versionName` and Linux
-package version are `1.0.<versionCode>`. The initial base is 1752, preserving an
+package version are `0.1.<versionCode>`. The initial base is 1752, preserving an
 update floor across the source-history extraction. Do not lower or remove it.
 All reachable commits are counted, not only first-parent history: the latter can decrease even on an ordinary fast-forward.
 Full Git history is required. Verification also requires the Git root to be the
@@ -57,7 +57,7 @@ AFM directory directly above `kmp`, never an enclosing repository. Retrying a co
 main history is not a supported release operation, and the publisher also refuses
 to lower the remembered version floor.
 
-Local development retains version code 1 and version name `1.0.0`. Supplying
+Local development retains version code 1 and version name `0.1.0`. Supplying
 `AFM_VERSION_CODE` and `AFM_VERSION_NAME` overrides both Android and desktop from
 one validated definition; partial/malformed overrides fail. The application ID
 stays `com.abysl.afm`.
@@ -102,8 +102,8 @@ Under the package base:
 
 ```text
 <full-source-commit>/delivery.json
-<full-source-commit>/<sha256>-afm-1.0.<count>-android.apk
-<full-source-commit>/<sha256>-afm-1.0.<count>-linux-x86_64.deb
+<full-source-commit>/<sha256>-afm-0.1.<versionCode>-android.apk
+<full-source-commit>/<sha256>-afm-0.1.<versionCode>-linux-x86_64.deb
 <full-source-commit>/<sha256>-test-reports.tar.gz
 <full-source-commit>/<sha256>-checksums.txt
 identity/android-signing.json
@@ -148,23 +148,55 @@ recover the checkpoint from the known-highest verified release under operator
 review before retrying. Never delete the identity or invent a lower version to
 make a retry pass. Immutable commit URLs remain available during a latest gap.
 
-## Later phase: GitHub Releases and Obtainium
+## Development prereleases and Obtainium
 
-1. Use `abysl/afm` as the GitHub destination and choose the release channel. A testing
-   pre-release channel is recommended initially; enable pre-releases in Obtainium.
-2. Read the Forgejo latest manifest, then fetch its immutable commit manifest
-   and signed APK. Verify source/version, certificate, size, and checksums.
-3. Copy those exact APK bytes into a GitHub Release with the matching numeric
-   version tag and versioned APK name. Do not rebuild or re-sign on GitHub.
-4. Make synchronization idempotent: existing matching assets are reused;
-   mismatched assets or a stale version fail rather than being overwritten.
-5. Mirror only explicitly approved public assets. Private CI reports/logs,
-   infrastructure, keystores, and source checkout contents stay private.
-6. Point Obtainium at that GitHub repository's releases, not GitHub Actions
-   run artifacts, which expire and are not the normal install/update source.
-7. Install one release on a real phone, publish a newer signed version, and
-   verify Obtainium updates in place without losing AFM data or pairing.
+Every successful, non-superseded trusted-main build publishes an immutable GitHub
+prerelease. Mirror polling can coalesce rapid pushes; a build that observes a
+newer GitHub main commit before publication remains a draft or stops without
+publishing. Failed, partial, pull-request, branch, and stale builds never create
+a visible release.
 
-No GitHub synchronization, credentials, public release, or production signing-key
+For release code $N$:
+
+| Value | Contract |
+| --- | --- |
+| Android `versionCode` | $N$ |
+| Android and package version | `0.1.N` |
+| GitHub tag | `v0.1.N` |
+| Release title | `AFM development 0.1.N` |
+| GitHub release flags | `prerelease=true`, `make_latest="false"` |
+| APK asset | `afm-0.1.N-android.apk` |
+
+$N$ is the checked-in compatibility base plus all reachable AFM commits. Gaps are
+valid. Retries reuse matching verified artifacts for the same source/version.
+A bad release is superseded by a later higher release, never repaired by lowering
+an Android version or replacing an already published APK.
+
+`afmPublishGitHub` verifies the standalone signed bundle and creates a draft
+release for its exact AFM commit. It uploads only the signed universal APK, Linux
+Debian package, generated `SHA256SUMS`, and generated `release-metadata.json`.
+Private CI reports/logs, Forgejo internals, keystores, and source workspaces are
+not public assets. It verifies every uploaded asset before the final main-commit
+check and draft publication. Existing conflicting published releases are rejected;
+partial uploads remain retriable drafts.
+
+The GitHub token is supplied only to `afmPublishGitHub`, after the credential-free
+build and separate signing/Forgejo delivery tasks. It must never reach Cargo,
+UniFFI, Gradle compilation, Android signing tools, app tests, or the phone.
+
+In Obtainium use source `https://github.com/abysl/afm` with **Include prereleases**
+enabled, **Name (smart)** sort, and **Verify the latest tag** disabled. GitHub's
+latest endpoint excludes prereleases. Keep **Use release title as version string**
+and release-date versioning disabled; the numeric tag is the source of ordering.
+Optionally filter APK assets with:
+
+```regex
+^afm-0\.1\.[0-9]+-android\.apk$
+```
+
+Install one signed prerelease on a real phone, then prove a higher signed version
+updates in place without reinstalling or losing AFM data. The phone needs no
+GitHub write credential. Existing debug-signed installs need a deliberate one-time
+migration; AFM tooling never uninstalls them automatically.
 provisioning is implemented or performed by this change. Live Forgejo publication
 also requires the configured secrets and a reviewed pipeline run.
