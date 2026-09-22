@@ -121,7 +121,7 @@ class ForgejoPublisherTest {
         registry.branch = OTHER_COMMIT
         assertThrows(DeliveryException::class.java) { publisher.publish(bundle, COMMIT) }
         assertFalse(registry.requests.any { it.method == "PUT" || it.method == "DELETE" })
-        original.copy(source = original.source.copy(afmCommit = OTHER_COMMIT), version = ReleaseVersion("1.0.6", 6)).write(bundle.resolve("delivery.json"))
+        original.copy(source = original.source.copy(afmCommit = OTHER_COMMIT), version = ReleaseVersion("0.1.6", 6)).write(bundle.resolve("delivery.json"))
         assertEquals("latest version code is newer; immutable bundle retained", publisher.publish(bundle, OTHER_COMMIT))
         assertFalse(registry.files.containsKey("latest" to "delivery.json"))
         original.write(bundle.resolve("delivery.json"))
@@ -219,7 +219,7 @@ class ForgejoPublisherTest {
         contents.forEach { (name, bytes) -> path.resolve(name).writeBytes(bytes) }
         val manifest = ReleaseManifest(
             ReleaseSource(COMMIT, SPIRIT_COMMIT),
-            ReleaseVersion("1.0.$version", version),
+            ReleaseVersion("0.1.$version", version),
             AndroidRelease("com.abysl.afm", CERTIFICATE),
             contents.map { (name, bytes) -> ReleaseArtifact(name, hash(bytes), bytes.size.toLong(), "application/octet-stream") },
         )
@@ -238,7 +238,7 @@ class ForgejoPublisherTest {
 
     private fun manifestBytes(version: Int = 7, certificate: String = CERTIFICATE): ByteArray {
         val existing = ReleaseManifest.read(bundle.resolve("delivery.json"))
-        return ReleaseManifest.toJson(existing.copy(version = ReleaseVersion("1.0.$version", version), android = existing.android.copy(certificateSha256 = certificate))).toByteArray()
+        return ReleaseManifest.toJson(existing.copy(version = ReleaseVersion("0.1.$version", version), android = existing.android.copy(certificateSha256 = certificate))).toByteArray()
     }
 
     private fun hash(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

@@ -23,7 +23,7 @@ An optional integration test signs a real built version-42 APK with a disposable
 one-day key, verifies it, and deletes the key/output. Build the fixture first:
 
 ```sh
-AFM_VERSION_CODE=42 AFM_VERSION_NAME=1.0.42 devenv shell -- release-android
+AFM_VERSION_CODE=42 AFM_VERSION_NAME=0.1.42 devenv shell -- release-android
 AFM_SIGNING_SMOKE_APK="$PWD/app/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk" devenv shell -- ./gradlew -p build-logic test --no-configuration-cache
 ```
 

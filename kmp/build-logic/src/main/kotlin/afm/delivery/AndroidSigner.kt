@@ -19,12 +19,6 @@ import java.util.zip.ZipFile
 private const val applicationId = "com.abysl.afm"
 private const val buildToolsVersion = "36.0.0"
 private const val maximumVersionCode = 2_100_000_000
-private val requiredSecrets = listOf(
-    "AFM_KEYSTORE_BASE64",
-    "AFM_KEYSTORE_PASSWORD",
-    "AFM_KEY_ALIAS",
-    "AFM_KEY_PASSWORD",
-)
 private val numericVersion = Regex("(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)")
 private val certificateDigest = Regex("certificate SHA-256 digest:\\s*([0-9A-Fa-f:]+)")
 private val packageMetadata = Regex("package:\\s+name='([^']+)'\\s+versionCode='([^']+)'\\s+versionName='([^']+)'")
@@ -91,17 +85,27 @@ class AndroidSigner(private val commands: CommandRunner = SystemCommands(Duratio
                     toolEnvironment,
                 )
                 requireRegularFile(signedApk, "Android signing tool failed")
-                val digest = verifyCertificate(signedApk, tools, temporaryDirectory, toolEnvironment)
-                verifyMetadata(signedApk, tools, temporaryDirectory, toolEnvironment, versionCode, versionName)
-                verifyNativeLibraries(signedApk)
+                val metadata = verify(signedApk, versionCode, versionName, environment)
                 publish(signedApk, target)
-                return SigningMetadata(applicationId, versionCode, versionName, digest)
+                return metadata
             } finally {
                 deleteTree(temporaryDirectory)
             }
         } finally {
             keystore.fill(0)
         }
+    }
+
+    fun verify(apk: Path, versionCode: Int, versionName: String, environment: Map<String, String>): SigningMetadata {
+        validateVersion(versionCode, versionName)
+        val source = apk.toAbsolutePath().normalize()
+        requireRegularFile(source, "signed APK is unavailable")
+        val tools = findTools(environment)
+        val safeEnvironment = sanitizedBuildEnvironment(environment)
+        val digest = verifyCertificate(source, tools, source.parent, safeEnvironment)
+        verifyMetadata(source, tools, source.parent, safeEnvironment, versionCode, versionName)
+        verifyNativeLibraries(source)
+        return SigningMetadata(applicationId, versionCode, versionName, digest)
     }
 
     private fun verifyCertificate(
@@ -181,7 +185,7 @@ private fun validateVersion(versionCode: Int, versionName: String) {
 }
 
 private fun decodeKeystore(environment: Map<String, String>): ByteArray {
-    requiredSecrets.forEach { requireSecret(environment, it) }
+    signingSecretNames.forEach { requireSecret(environment, it) }
     val encoded = requireSecret(environment, "AFM_KEYSTORE_BASE64")
     if (encoded.length % 4 != 0) throw DeliveryException("invalid keystore data")
     val keystore = try {
@@ -239,9 +243,7 @@ private fun isExecutable(path: Path): Boolean =
     Files.isRegularFile(path, NOFOLLOW_LINKS) && !Files.isSymbolicLink(path) && Files.isExecutable(path)
 
 private fun toolEnvironment(environment: Map<String, String>): Map<String, String> = buildMap {
-    environment.forEach { (name, value) ->
-        if (name !in requiredSecrets && name != "AFM_FORGEJO_TOKEN") put(name, value)
-    }
+    putAll(sanitizedBuildEnvironment(environment))
     put("AFM_KEYSTORE_PASSWORD", requireSecret(environment, "AFM_KEYSTORE_PASSWORD"))
     put("AFM_KEY_PASSWORD", requireSecret(environment, "AFM_KEY_PASSWORD"))
 }

@@ -7,6 +7,16 @@ import java.util.concurrent.TimeUnit
 
 class DeliveryException(message: String) : RuntimeException(message)
 
+internal val signingSecretNames = setOf("AFM_KEYSTORE_BASE64", "AFM_KEYSTORE_PASSWORD", "AFM_KEY_ALIAS", "AFM_KEY_PASSWORD")
+private val publicationSecretNames = setOf("AFM_FORGEJO_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
+
+fun sanitizedBuildEnvironment(environment: Map<String, String>): Map<String, String> {
+    val clean = environment.filterKeys { it !in signingSecretNames && it !in publicationSecretNames }
+    return if (clean["ANDROID_NDK_HOME"].isNullOrBlank() && !clean["ANDROID_NDK_ROOT"].isNullOrBlank()) {
+        clean + ("ANDROID_NDK_HOME" to clean.getValue("ANDROID_NDK_ROOT"))
+    } else clean
+}
+
 data class CommandResult(val exitCode: Int, val output: String)
 
 fun interface CommandRunner {

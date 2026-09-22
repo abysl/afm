@@ -20,7 +20,7 @@ import kotlinx.serialization.json.longOrNull
 private const val maximumArtifactBytes = 2L * 1024 * 1024 * 1024
 private val commitPattern = Regex("[0-9a-fA-F]{40}")
 private val hashPattern = Regex("[0-9a-fA-F]{64}")
-private val versionPattern = Regex("1\\.0\\.([1-9][0-9]*)")
+private val versionPattern = Regex("(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.([1-9][0-9]*)")
 private val artifactNamePattern = Regex("[A-Za-z0-9][A-Za-z0-9._+-]*")
 
 data class ReleaseSource(val afmCommit: String, val spirit2Commit: String)

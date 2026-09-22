@@ -47,7 +47,7 @@ Android launching, tests, versioning, signing, manifests, and artifact publicati
 Cargo owns Rust builds; UniFFI generates the SDK bindings. There is no Python
 build or release path. See [build-logic](kmp/build-logic/README.md).
 
-Normal development versions remain `1` / `1.0.0`. Trusted CI releases use the
+Normal development versions remain `1` / `0.1.0`. Trusted CI development prereleases use the
 checked-in `release-version-base.txt` plus all reachable AFM commits, so extracting
 source history cannot lower Android version codes. Do not lower that base or
 rewrite published release history. Release manifests identify this repository's
@@ -58,11 +58,13 @@ release APKs are unsigned until explicitly processed by the protected signing ta
 there is no debug-key fallback. Keep one backed-up signing identity for upgrades.
 
 The intended delivery path is GitHub main → a private Forgejo pull mirror →
-self-hosted Woodpecker → signed release downloads. Deployment configuration and
-credentials are managed outside this repository. The final GitHub Release publisher
-and live signed-release acceptance remain deployment work, not a claim made by
-this source port. No GitHub Actions runner is required. The
-[delivery design](wiki/design/delivery.md) defines the task/credential contracts.
+self-hosted Woodpecker → versioned signed GitHub prereleases. No GitHub Actions
+runner is required. Every successful non-superseded main build publishes immutable
+`v0.1.N` prerelease assets after draft upload/verification; stale and partial builds
+never advance the testing channel. Obtainium sorts the numeric tags with prerelease
+support enabled. Deployment configuration and credentials remain outside this
+repository. See the [delivery design](wiki/design/delivery.md) for exact version,
+asset, retry, and phone-update contracts.
 
 ## Disposable Linux CI environment
 
