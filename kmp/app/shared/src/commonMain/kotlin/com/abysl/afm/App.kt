@@ -1,5 +1,6 @@
 package com.abysl.afm
 
+import blue.rae.spirit.sdk.PairingState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -23,18 +26,31 @@ import kotlinx.coroutines.launch
 
 @Composable
 @Preview
-fun App(store: BlobStore? = null) {
+fun App(
+    store: BlobStore? = null,
+    pairing: PairingState? = null,
+    onRefreshTicket: () -> Unit = {},
+    pairDeviceButton: (@Composable () -> Unit)? = null,
+) {
     MaterialTheme {
         Column(
             modifier = Modifier
                 .background(MaterialTheme.colorScheme.primaryContainer)
                 .safeContentPadding()
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("AFM on ${getPlatform().name}", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(16.dp))
+            pairing?.let {
+                PairingPanel(
+                    pairing = it,
+                    onRefreshTicket = onRefreshTicket,
+                    pairDeviceButton = pairDeviceButton,
+                )
+                Spacer(Modifier.height(24.dp))
+            }
             if (store == null) {
                 Text("file storage is not available on this platform")
             } else {

@@ -17,6 +17,9 @@ dependencies {
     implementation(project(":app:shared"))
 
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.viewmodelCompose)
+    implementation(libs.compose.material3)
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     implementation(libs.compose.uiToolingPreview)
     debugImplementation(libs.compose.uiTooling)

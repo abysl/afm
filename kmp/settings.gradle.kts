@@ -38,6 +38,7 @@ includeBuild("../deps/spirit2/kmp") {
     name = "spirit2"
     dependencySubstitution {
         substitute(module("blue.rae.spirit:spirit-sdk")).using(project(":sdk"))
+        substitute(module("blue.rae.spirit:spirit-mesh")).using(project(":mesh"))
     }
 }
 include(":app")
