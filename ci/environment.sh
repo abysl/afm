@@ -14,3 +14,11 @@ export CARGO_INCREMENTAL=0
 export CARGO_PROFILE_DEV_DEBUG=0
 export CARGO_PROFILE_TEST_DEBUG=0
 export CARGO_TARGET_DIR="$AFM_ROOT/deps/spirit2/rust/target"
+if command -v google-chrome >/dev/null 2>&1; then
+  export CHROME_BIN="$(command -v google-chrome)"
+fi
+if [ "$(id -u)" = 0 ] && { [ -f /.dockerenv ] || [ -f /run/.containerenv ]; }; then
+  export AFM_CI_CONTAINER=1
+else
+  export AFM_CI_CONTAINER=0
+fi

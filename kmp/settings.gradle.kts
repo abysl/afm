@@ -1,4 +1,7 @@
 pluginManagement {
+    includeBuild("build-logic") {
+        name = "afm-build-logic"
+    }
     repositories {
         google {
             mavenContent {
@@ -32,6 +35,7 @@ plugins {
 rootProject.name = "afm"
 
 includeBuild("../deps/spirit2/kmp") {
+    name = "spirit2"
     dependencySubstitution {
         substitute(module("blue.rae.spirit:spirit-sdk")).using(project(":sdk"))
     }
