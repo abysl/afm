@@ -11,7 +11,8 @@
 
 The shared module consumes `blue.rae.spirit:spirit-mesh` for portable node and
 pairing-session contracts, and `blue.rae.spirit:spirit-sdk` for JVM and Android
-native nodes/stores. Both come from the pinned `../deps/spirit2/kmp` composite.
+native nodes/stores. Both come from the pinned `deps/spirit2/kmp` composite
+(relative to the repository root).
 Spirit owns pairing, ticket expiry, membership, and heartbeat presence; AFM owns
 presentation, the Android camera, data-directory selection, and app lifecycle.
 Web and iOS expose the UI without a native backend because UniFFI uses JNA.
@@ -45,11 +46,19 @@ Android and JVM tests exercise AFM through Kotlin, UniFFI, and Rust.
    minutes, and bearer secrets. Show them only to trusted devices.
 
 Only Android offers **Pair device** and opens a bundled camera scanner; there is
-no external scanning service. Denial and cancellation return to AFM safely. All
+no external scanning service. Permission/scanner launches stay disabled until
+the in-flight result returns; denial and cancellation return to AFM safely. All
 native targets display their QR and paired devices, including offline members.
 Starting several independent meshes and then merging them is not supported. A
-failed first enrollment can leave the scanner with its new empty mesh; subsequent
-scans continue using it rather than replacing any successful pairings.
+failed first enrollment can leave the scanner with a founder-only mesh; its
+original receiver ticket is then withdrawn. Subsequent scans continue using that
+mesh rather than replacing successful pairings. To join an existing mesh, have
+one of its members scan the fresh device's ticket, not the other way around.
+
+New meshes use a random `mesh1_...` ID independent of device identity. Members
+need compatible Spirit versions to enroll in them. Existing legacy meshes retain
+their signed IDs rather than silently migrating. The founder is not an always-on
+coordinator; any member can enroll another fresh device.
 
 Spirit exchanges authenticated ping/pong every five seconds while the native node
 is running. Green/Online means a ping or pong arrived from that identity less than
@@ -61,9 +70,11 @@ Android retains one node in an Activity ViewModel across rotation and scanning,
 using `noBackupFilesDir/afm-node` for identity and membership (not cloud backup).
 Desktop uses `~/.spirit2/afm-node`, separate from the existing blob store directory.
 Closing the owner shuts down the node; reopening retains its identity and mesh,
-not cached online status. There is no Android foreground service: process
+not cached online status. Blob storage remains open until that same owner closes,
+even if pairing cannot open its node. Native actions already in progress complete
+before node shutdown; cancelling a coroutine does not undo remote enrollment. There is no Android foreground service: process
 suspension, force-stop, or app closure can stop heartbeats and eventually make the
 device appear offline. Pairing does not implement file transfer.
 
-See the [implementation plan](../../plans/qr-mesh-pairing/plan.md) for automated
+See the [implementation plan](../../../plans/qr-mesh-pairing/plan.md) for automated
 validation and the outstanding physical camera/cross-network acceptance checks.

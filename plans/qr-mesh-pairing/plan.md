@@ -41,10 +41,13 @@ are out of scope; stopped apps eventually appear offline.
 
 ## Confirmed design and review boundaries
 
-- Three focused implementation PRs: [Spirit2 #3](https://github.com/abysl/spirit-library2/pull/3)
-  corrects presence; [Spirit2 #4](https://github.com/abysl/spirit-library2/pull/4)
-  adds reusable KMP sessions; [AFM #7](https://github.com/abysl/afm/pull/7)
-  integrates the app and published dependency pin. Merge dependencies before AFM.
+- [Spirit2 #3](https://github.com/abysl/spirit-library2/pull/3) corrected presence
+  and is already merged. Merge [Spirit2 #4](https://github.com/abysl/spirit-library2/pull/4)
+  (KMP sessions), then [Spirit2 #7](https://github.com/abysl/spirit-library2/pull/7)
+  (independent mesh IDs), then [Spirit2 #5](https://github.com/abysl/spirit-library2/pull/5)
+  (docs), then [AFM #7](https://github.com/abysl/afm/pull/7) (app/pin), and finally
+  [AFM #8](https://github.com/abysl/afm/pull/8) (these docs). Use merge commits for
+  these dependent branches so the exact dependency pin stays reachable from main.
   Documentation is reviewed separately in each repository, not mixed into these
   implementation diffs. No release/signing changes.
 - Spirit2's `spirit1` ticket is an existing five-minute, single-use bearer
@@ -53,8 +56,8 @@ are out of scope; stopped apps eventually appear offline.
   the native authenticated handshake; no extra approval protocol is invented.
 - Fresh apps do not independently create meshes at startup. B creates one on its
   first eligible scan, then admits C and A into it. Independent existing meshes
-  cannot merge. A failed first enrollment may leave B with an empty persistent
-  mesh, while no remote membership is fabricated. Invalid syntax and scanning
+  cannot merge. A failed first enrollment may leave B with a founder-only persistent
+  mesh, while no remote membership is fabricated. Its former receiver QR is withdrawn. Invalid syntax and scanning
   the currently displayed self ticket are rejected before creating a mesh.
 - Reuse persisted native identity and membership; UI presence starts offline after
   process restart until an actual new heartbeat is received.
@@ -79,9 +82,14 @@ are out of scope; stopped apps eventually appear offline.
 
 ## Validation record
 
-AFM consumes published Spirit revision `cf4e112e83ca89333c023d35decb9d998178af7e`.
+AFM now consumes published Spirit revision `e3bb8f15ef3151748cc3f936ab7ff6ac273ec797`.
 The prerequisite reviews record passing native node/FFI tests, virtual-time
 session tests and three-node local SDK membership/no-introducer/restart coverage.
+
+### Initial implementation validation
+
+The following initial run used Spirit revision `cf4e112e83ca89333c023d35decb9d998178af7e`.
+The emulator observations below apply to that run, not a new physical-device test.
 
 From `kmp/`, these integrated checks passed:
 
@@ -111,6 +119,28 @@ devenv shell -- ./gradlew :app:shared:jvmTest :app:desktopApp:classes :app:andro
   :demo:shared:jvmTest` suite and AFM's JVM tests also passed with the updated pin.
   This follow-up changes a test, not production behavior.
 - `git diff --check` passed. No release artifact was signed or published.
+
+### Final review validation
+
+- Repeated the native preparation, both Android ABI builds, debug APK assembly,
+  desktop compilation, JVM tests, and JS/Wasm compilation above with the final pin.
+  All passed; AFM now runs ten JVM tests.
+- Added a regression using a real `PairingSession` whose node factory fails. Blob
+  reads/writes remain usable after pairing exits, then the store closes once on
+  owner cancellation. Removing the owner-lifetime wait reproduced the old failure.
+- Guarded repeated permission/scanner launches with saveable in-flight state and
+  kept the QR secret warning independent of the returned ticket lifetime.
+- Spirit's final review test deterministically blocked ticket publication on a
+  second thread: the old code shut the native node down too early; the fixed code
+  waits for publication and leaves no QR after shutdown. Cancellation tests also
+  cover completion of already-started native enrollment.
+- Spirit's full Rust workspace tests and node-specific strict Clippy passed.
+  Full-workspace strict Clippy still flags an unrelated existing
+  `chunks_exact_to_as_chunks` lint in `rust/crates/core/src/blob.rs`.
+- Spirit mesh/SDK/demo JVM tests and JS/Wasm test-source compilation passed. Mesh
+  identity checks cover v2 signature tampering, v1 compatibility against the old
+  signing tuple, restart persistence, and enrollment without the founder online.
+- No release was signed/published and no final-review APK was installed on a device.
 
 Still unverified: physical-camera decoding, three physical A/B/C devices across
 real networks, installed Linux-package portability, and iOS runtime. JS/Wasm were
