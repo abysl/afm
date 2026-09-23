@@ -79,7 +79,7 @@ are out of scope; stopped apps eventually appear offline.
 
 ## Validation record
 
-AFM consumes published Spirit revision `35db362d37f5793473587cc71f946361cb30377f`.
+AFM consumes published Spirit revision `cf4e112e83ca89333c023d35decb9d998178af7e`.
 The prerequisite reviews record passing native node/FFI tests, virtual-time
 session tests and three-node local SDK membership/no-introducer/restart coverage.
 
@@ -104,6 +104,12 @@ devenv shell -- ./gradlew :app:shared:jvmTest :app:desktopApp:classes :app:andro
   and return with the same node identity and no added membership. No app crash
   was observed. The local SDK root and installed image selection needed to be
   aligned for emulator startup; this is not a source-build change.
+- The Spirit desktop CI test still assumed enrollment alone made a peer online.
+  It now exchanges an authenticated ping/pong before checking both peers' status.
+  The failing `:sdk:jvmTest :demo:shared:jvmTest` command was reproduced locally,
+  then passed with the fix. The combined `:mesh:jvmTest :sdk:jvmTest
+  :demo:shared:jvmTest` suite and AFM's JVM tests also passed with the updated pin.
+  This follow-up changes a test, not production behavior.
 - `git diff --check` passed. No release artifact was signed or published.
 
 Still unverified: physical-camera decoding, three physical A/B/C devices across
