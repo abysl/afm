@@ -17,7 +17,6 @@ import blue.rae.spirit.sdk.AndroidNodeContext
 import blue.rae.spirit.sdk.PairingSession
 import blue.rae.spirit.sdk.SpiritNode
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -60,11 +59,12 @@ class AfmViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            try {
-                pairing.run()
-            } finally {
-                withContext(NonCancellable + Dispatchers.IO) { store?.close() }
-            }
+            runPairingUntilOwnerCancellation(
+                pairing::run,
+                onOwnerTeardown = {
+                    withContext(Dispatchers.IO) { store?.close() }
+                },
+            )
         }
     }
 

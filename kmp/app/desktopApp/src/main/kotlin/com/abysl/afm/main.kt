@@ -11,7 +11,6 @@ import androidx.compose.ui.window.application
 import blue.rae.spirit.sdk.PairingSession
 import blue.rae.spirit.sdk.SpiritNode
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -28,11 +27,12 @@ fun main() = application {
     val scope = rememberCoroutineScope()
     val nodeJob = remember {
         scope.launch {
-            try {
-                pairing.run()
-            } finally {
-                withContext(NonCancellable + Dispatchers.IO) { store?.close() }
-            }
+            runPairingUntilOwnerCancellation(
+                pairing::run,
+                onOwnerTeardown = {
+                    withContext(Dispatchers.IO) { store?.close() }
+                },
+            )
         }
     }
     var closing by remember { mutableStateOf(false) }

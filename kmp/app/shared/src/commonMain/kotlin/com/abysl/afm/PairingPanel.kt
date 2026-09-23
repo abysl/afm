@@ -108,7 +108,7 @@ private fun InvitationPanel(
         ExactQrMatrix(invitation)
         Spacer(Modifier.height(8.dp))
         Text("Ticket expires in $secondsRemaining seconds.")
-        Text("This ticket is a single-use, 5 minute bearer secret. Show it only to trusted devices.")
+        Text("This ticket is a single-use bearer secret. Show it only to trusted devices.")
     } else if (secondsRemaining <= 0) {
         Text("Pairing QR expired. Refresh it before pairing a device.")
     } else {
