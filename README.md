@@ -58,7 +58,7 @@ Release aliases produce local artifacts, not automatic public releases. Android
 release APKs are unsigned until explicitly processed by the protected signing task;
 there is no debug-key fallback. Keep one backed-up signing identity for upgrades.
 
-The intended delivery path is GitHub main → a private Forgejo pull mirror →
+The delivery path is GitHub main → a private Forgejo pull mirror →
 self-hosted Woodpecker → versioned signed GitHub prereleases. No GitHub Actions
 runner is required. Every successful non-superseded main build publishes immutable
 `v0.1.N` prerelease Android and Linux assets after draft upload/verification; stale

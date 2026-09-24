@@ -159,9 +159,10 @@ directly as a `file:` URL is not a supported launch path.
 
 ## CI delivery
 
-The new delivery pipeline is implemented by the `afm.delivery` Gradle plugin
+The delivery pipeline is implemented by the `afm.delivery` Gradle plugin
 in [build-logic](build-logic/README.md), not Python orchestration. It exposes
-`afmPrepareNative`, `afmCiBuild`, `afmDeliveryPreflight`, and `afmDeliver`.
+`afmPrepareNative`, `afmCiBuild`, `afmDeliveryPreflight`, `afmDeliver`, and
+`afmPublishGitHub`.
 Both CI and developer preparation invoke Cargo and UniFFI directly. Launcher and
 alias tests now run through Kotlin/JUnit, and AFM contains no Python scripts.
 Existing alias names remain available; custom APK selection now uses `-PafmApk`
@@ -169,8 +170,9 @@ instead of the removed helper's positional APK argument.
 
 See the [delivery design](../wiki/design/delivery.md) for the trusted-main task
 sequence, stable Android signing secrets, immutable Forgejo artifacts, and the
-later GitHub Releases/Obtainium sync. Live publication requires provisioning the
-protected secrets; a successful local package build is not evidence of upload.
+GitHub development prereleases consumed by Obtainium. Publication runs only in
+trusted-main CI with the protected secrets; a successful local package build is
+not evidence of upload.
 
 ## IntelliJ IDEA
 

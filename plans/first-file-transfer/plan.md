@@ -2,10 +2,13 @@
 
 ## Status and scope
 
-Foundation work is in progress. The run/test/release command matrix is being
-implemented and verified; the file-transfer UX and real transfer remain planned.
-The full foundation stage, including CI and physical-device persistence, is not
-yet accepted.
+Foundation work is in progress. The run/test/release command matrix and the
+CI delivery pipeline are implemented: trusted-main Woodpecker runs publish signed
+Android and Linux development prereleases to GitHub (first `v0.1.1765`). QR mesh
+pairing has landed separately. The full foundation stage is not yet accepted:
+physical-device installation, in-place update and persistence evidence, and
+Android instrumentation in CI remain open. The file-transfer UX and real
+transfer remain planned.
 The agreed first targets are Android and Linux desktop. Delivery order is:
 **development/testing and CI → AFM file-transfer UX → real transfer**.
 
@@ -68,17 +71,23 @@ test and artifact tasks, separate protected signing/publication, immutable
 Forgejo bundles, and guarded latest promotion. The former Python CI prototype
 has been replaced rather than retained as a second orchestrator.
 
+Delivered rollout work:
+
+- The dedicated AFM signing identity and Forgejo/GitHub publication credentials
+  are provisioned in Woodpecker. Preserve the key for every subsequent Android update.
+- Real main pipeline runs publish signed, verified GitHub prereleases containing
+  the universal APK and Linux `.deb`, as specified in the delivery design.
+
 Remaining rollout work:
 
-1. Provision the dedicated AFM signing identity and restricted Forgejo credentials
-   in Woodpecker; preserve the key for every subsequent Android update.
-2. Land the reviewed workflow and obtain a successful real main pipeline run.
-3. Verify downloaded Forgejo APK/package bytes and a real phone installation.
-4. Later, mirror only approved exact artifacts into GitHub Releases and configure
-   Obtainium; this is planned, not part of the current implementation.
-5. Prove an in-place phone update preserves AFM data and completed pairing once
-   pairing is integrated into AFM. Do not treat debug-to-release migration as an
-   ordinary update or uninstall automatically.
+1. Install a published prerelease through Obtainium on a real phone and the
+   published `.deb` on a Linux desktop; record versions and results.
+2. Prove an in-place phone update to a higher prerelease preserves AFM data and
+   completed pairing. Do not treat debug-to-release migration as an ordinary
+   update or uninstall automatically.
+3. Run Android instrumentation on an emulator in CI. `afmCiBuild` currently runs
+   Rust, SDK, AFM JVM, build-logic, and Android host unit tests; `test-android`
+   remains a local command.
 
 ### Remaining foundation scope
 

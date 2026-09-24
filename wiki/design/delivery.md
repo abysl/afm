@@ -3,9 +3,10 @@
 ## Scope
 
 Build and verify Android and Linux desktop artifacts in private Woodpecker CI,
-then publish them to Forgejo's Generic Package Registry. GitHub synchronization
-and Obtainium setup are a later phase. No source code or credentials are copied
-to GitHub by this implementation.
+publish the signed bundle to Forgejo's Generic Package Registry, then publish
+its public Android and Linux assets as a versioned GitHub prerelease for
+Obtainium. No credentials, private CI reports, or Forgejo internals are copied
+to GitHub.
 
 The implementation uses Gradle Kotlin DSL for the task graph and tested Kotlin
 JVM build logic for source verification, signing, manifests, and publication.
@@ -26,6 +27,7 @@ Run from `kmp/` in its devenv environment. The CI runner provides event metadata
 | `./gradlew afmPrepareNative -PafmRelease=true --no-configuration-cache` | Build host Rust/UniFFI, generate Kotlin, build both Android native ABIs, record source context |
 | `./gradlew afmCiBuild -PafmRelease=true --no-configuration-cache` | Test delivery logic, Kotlin launcher/aliases, Rust, SDK, and AFM JVM; build unsigned APK/AAB and Linux `.deb`; archive reports |
 | `./gradlew afmDeliver -PafmRelease=true --no-daemon --no-configuration-cache` | Restore an existing verified bundle or sign/package locally, then publish and conditionally promote latest |
+| `./gradlew afmPublishGitHub -PafmRelease=true --no-daemon --no-configuration-cache` | Verify the signed bundle and publish its public assets as a GitHub development prerelease |
 
 Native preparation is a separate invocation because the included SDK needs its
 generated Kotlin/native resources before the consuming composite build executes.
@@ -72,6 +74,10 @@ repository secrets, limited to trusted main push/manual delivery:
 | `AFM_KEY_ALIAS` | Release private-key alias |
 | `AFM_KEY_PASSWORD` | Private-key password |
 | `AFM_FORGEJO_TOKEN` | Package write and source repository read access |
+| `GH_TOKEN` | GitHub release write access, supplied only to `afmPublishGitHub` |
+
+The deployment also supplies the non-secret `AFM_GITHUB_REPOSITORY`
+(`owner/name`) for `afmPublishGitHub`.
 
 Do not commit a keystore, password, or token. The keystore is decoded into a
 private system temporary directory, not the project, and is removed on success
@@ -182,6 +188,10 @@ must not block the Android/Linux phone-testing channel. It verifies every upload
 check and draft publication. Existing conflicting published releases are rejected;
 partial uploads remain retriable drafts.
 
+GitHub publication is serialized by its own runner-local lock, by default
+`afm-delivery/github-release.lock` beside the Forgejo lock; `AFM_GITHUB_PUBLISH_LOCK`
+overrides it.
+
 The GitHub token is supplied only to `afmPublishGitHub`, after the credential-free
 build and separate signing/Forgejo delivery tasks. It must never reach Cargo,
 UniFFI, Gradle compilation, Android signing tools, app tests, or the phone.
@@ -200,5 +210,3 @@ Install one signed prerelease on a real phone, then prove a higher signed versio
 updates in place without reinstalling or losing AFM data. The phone needs no
 GitHub write credential. Existing debug-signed installs need a deliberate one-time
 migration; AFM tooling never uninstalls them automatically.
-provisioning is implemented or performed by this change. Live Forgejo publication
-also requires the configured secrets and a reviewed pipeline run.
