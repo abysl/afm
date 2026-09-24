@@ -163,21 +163,28 @@ entry. Trust is transitive: admitting a device trusts it to admit others.
 
 A device leaves by signing a departure for its current generation. Nobody else can
 sign one for it, so leaving adds no permission rule. Membership stays
-append-only and merges as a plain union of records:
+append-only. Merge is a union of individually signed records, and trust and
+current membership are derived from that union rather than stored:
 
-- A device is a current member of a mesh if it has an admission at a generation
-  higher than every departure it has signed for that mesh.
-- Re-adding a departed device signs a new admission at the next generation. The
+- A device is a current member of a mesh if its highest trusted admission has
+  no departure.
+- Re-adding a departed device signs a readmission at the next generation. The
   normal scan flow does this.
 - A departure also closes what the device signed while it was a member. It
   lists the digests of every admission the device has issued in that mesh,
   including its own founding admission if it is the founder. It also carries opaque
   application counters, such as AFM's last catalog sequence number for that
   generation.
-- Once the departure is known, admissions and application records attributed
-  to that device are accepted only if the departure covers them. A device that
-  has left cannot add devices or catalog changes afterwards, and everything it
-  did while it was a member stays valid.
+- Once a member holds the departure, admissions and application records
+  attributed to that device are trusted only if the departure covers them. A
+  device that has left cannot add devices or catalog changes afterwards, and
+  everything it did while it was a member stays valid.
+- A legitimate readmission by another member reopens the device. Anything it
+  signed while departed becomes trusted again. That is accepted: the device is
+  a full member again, and it could sign the same records then.
+- Members that have not yet received the departure cannot tell a later
+  admission from an earlier one. Once they receive the departure, they drop the
+  uncovered records. One such record never invalidates the rest of the mesh.
 
 A "left" flag without that closure would still let the departed device's key
 admit devices and write catalog entries. It would look like leaving but would
@@ -233,7 +240,9 @@ Bounds per device and per mesh:
 
 - At most 64 meshes per device, counting departing ones.
 - At most 256 current members per mesh.
-- At most 512 membership records (admissions plus departures) per mesh. When a
+- At most 512 membership records (admissions plus departures) per mesh. PR #9
+  and S1 currently allow 256 admission records; S2 raises this and recomputes
+  the total departure-digest budget for the 1 MiB `mesh/2` message limit. When a
   mesh reaches this bound, it refuses further joins with an explicit "group
   membership history is full" error. Compacting that history is deferred.
 
@@ -244,7 +253,7 @@ The encoding follows [Spirit2 #9](https://github.com/abysl/spirit-library2/pull/
 - Generation-0 admissions keep their existing `/1` or `/2` signed bytes and
   JSON form, so no stored signature changes.
 - Re-adding a device signs a readmission,
-  `("spirit/mesh/readmission/1", mesh_id, founder, mesh_name, member, generation, issuer)`.
+  `("spirit/mesh/readmission/1", mesh_id, founder, mesh_name, member, issuer, generation)`.
   It is valid only after a departure from the previous generation.
 
 A departure is self-signed over
@@ -253,22 +262,37 @@ A departure is self-signed over
 - `issued` is the sorted set of digests of every admission and readmission this
   device has issued in this mesh. A digest is the BLAKE3 hash of the record's
   signed tuple, excluding the signature, so a retried admission has one digest.
+  Digests are encoded as unpadded base64url strings, like signatures.
 - `closing` maps application protocol names to a final sequence number. At
   most 8 entries are allowed, and names follow the Spirit name rules. Spirit
   signs and relays `closing` without interpreting it.
 
-Verification keeps the existing order-independent trust closure from the
-founding admission, with these rules:
+Merge and verification:
 
-- An admission is trusted if it is validly signed and its issuer holds a
-  trusted admission. In addition, either the issuer is a current member, or the
-  admission's digest is in one of the issuer's departures.
-- A departure is accepted if it is self-signed and its member holds a trusted
-  admission at that generation.
-- Several admissions of one device at the same generation, for example from
-  concurrent introducers, are all kept. Merge stays a union; records are
-  deduplicated by exact bytes. Every admission of a device must carry the same
-  nickname, as now.
+1. Check that the incoming snapshot's mesh ID, name, and founder match, and that
+   its size bounds hold.
+2. Check every record's signature. A snapshot containing a record with a bad
+   signature is rejected as malformed.
+3. Take the union of both record sets. Admissions are deduplicated by digest,
+   so distinct admissions of one device and generation from different
+   introducers are all kept. Every admission of a device must carry the same
+   nickname, as now.
+4. Keep one **canonical departure** per device and generation: the one whose
+   signed payload has the lowest BLAKE3 digest. A key that signs two different
+   departures therefore still converges to one `issued` set and one `closing`
+   map on every member.
+5. Compute the trusted admissions as a monotone fixpoint from the founding
+   admission. An admission is accepted once its issuer has an accepted
+   admission and either:
+   - its digest is in the issuer's canonical departure for an accepted
+     generation; or
+   - the issuer's highest *accepted* generation has no departure.
+
+   Only admissions accepted in earlier rounds count, so a departed key cannot
+   make itself current, alone or through a cycle with a throwaway key.
+6. Keep only accepted admissions and the departures of accepted generations.
+   Untrusted records are dropped, never fatal, so a valid mesh can never become
+   invalid by receiving one.
 
 An issuer persists each admission's digest in a local **issued log** before
 sending it. A crash after sending therefore cannot produce a departure that
@@ -277,14 +301,19 @@ membership: the admission joins the mesh only after a successful enrollment
 reply, as now, so a failed enrollment never lists a device that did not join.
 A departure's `issued` set is this log plus any admission in the mesh whose
 issuer is this device. That second part covers admissions signed before the log
-existed. The log holds at most 512 digests per mesh.
+existed. The log holds at most 512 digests per mesh and is deleted with the
+mesh's local state. After a rejoin, the mesh records still carry this device's
+earlier committed admissions.
 
 ### Protocols
 
-New record formats cannot be verified by current peers, so pairing and
-membership move to version 2 together. Every device in a group must update, and
-a device on `/1` fails its membership sync and appears offline to updated peers.
-AFM ships through one prerelease channel, so no `/1` compatibility path is kept.
+The readmission and departure records land first, in PR #9 and S1, on the
+existing `/1` protocols. No release ever shipped #9's earlier departure shape,
+so the node directories from those test builds must be reset. S2 changes
+routing, so pairing and membership then move to version 2 together. Every
+device in a group must update, and a device on `/1` fails its membership sync
+and appears offline to updated peers. AFM ships through one prerelease channel,
+so no `/1` compatibility path is kept.
 
 | Protocol | Behavior |
 |---|---|
@@ -349,7 +378,7 @@ conflict. Each operation is stored and exchanged as:
 CatalogOp {
   mesh:   MeshId
   author: NodeId
-  generation: u64        the author's membership generation in this mesh
+  generation: u32        the author's membership generation in this mesh
   seq:    u64            contiguous per (mesh, author, generation), starting at 1
   body:   Add { entry: EntryId, kind: File | Folder, path: [segment], hash?, size? }
         | Remove { entry: EntryId }
@@ -458,7 +487,7 @@ but they merge only after that Spirit2 PR merges.
 
 | # | Repo | PR | Depends on |
 |---|---|---|---|
-| S1 | spirit2 | [#9](https://github.com/abysl/spirit-library2/pull/9), amended: departures close the departed device's records (`issued`, `closing`, the issued log), with tests for rejected post-departure admissions and a crash right after sending an admission | — |
+| S1 | spirit2 | [#9](https://github.com/abysl/spirit-library2/pull/9), amended: departures close the departed device's records (`issued`, `closing`, the issued log), merge as a union with derived trust and canonical departures, and include tests for rejected post-departure admissions, self and cyclic readmission, equivocating departures, and a crash right after sending an admission | — |
 | D1 | afm | This implementation plan and the spec alignment with #9 | — |
 | S2 | spirit2 | **Multi-group node core (Rust):** `meshes` map with member and departing entries, migration from the single-mesh state, per-mesh routing on `pair/2`, `mesh/2` and `depart/1`, the heartbeat across all groups, limits (64 groups, 256 members, 512 records), and isolation tests | S1 |
 | S3 | spirit2 | **Bindings and sessions:** FFI, CLI `--mesh` and `mesh leave`, the `MeshNode` contract, splitting `PairingSession` into node-wide and per-group sessions, and Spirit's `wiki/design/nodes.md` | S2 |
@@ -516,7 +545,14 @@ transfer work, and they are planned into PRs once A3 lands:
   - Re-adding D by scan produces a generation-1 readmission, including when the
     introducer had not yet seen the departure. D's new catalog operations
     start at `seq` 1 without conflicting with its generation-0 operations.
-  - Concurrent re-admissions by two members converge to one membership.
+  - Concurrent readmissions by two members are both kept and converge to one
+    membership.
+  - A departed key's self-readmission, or a readmission cycle through a
+    throwaway key, is not trusted.
+  - Two different departures signed for the same generation converge to the
+    same canonical departure on every member.
+  - A member that accepted an uncovered admission from a departed key drops it
+    after receiving the departure, and still learns every valid admission.
   - An admission that D sent just before a crash is still listed in D's later
     departure.
   - Reaching 512 membership records gives the explicit history-full error.
