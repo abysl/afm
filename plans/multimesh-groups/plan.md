@@ -202,8 +202,10 @@ Leaving takes effect locally at once, even offline:
      deleted.
 2. Spirit signs the departure and records the mesh as **departed**. From then
    on the device does not authorize anyone for that mesh: no app requests,
-   fetches, or shares. The only enrollment it accepts is a readmission at the
-   next generation, which makes it a member again.
+   fetches, shares, or pings. It answers the mesh's members only with its
+   departed copy (step 4). While it keeps that copy, the only enrollment into
+   the mesh it accepts is a readmission at the next generation, which makes it
+   a member again.
 3. AFM removes the group from its UI, unshares its hashes, and deletes its
    catalog.
 4. Spirit pushes the departure once, in parallel, to every former member on
@@ -216,7 +218,14 @@ Leaving takes effect locally at once, even offline:
    It returns the departure, so the introducer can retry once with a
    readmission. The copy is removed when the device is readmitted. It is never
    kept if no current members remain, because nobody could need it. At most 64
-   departed copies are kept, and the earliest is evicted first.
+   departed copies are kept, in a persisted departure order, and the earliest
+   is evicted first.
+
+Evicting a copy, which takes 64 later departures, loses pull delivery and the
+stale-enrollment refusal for that mesh. Members that were never reached keep
+listing the device. A stale introducer's generation-0 enrollment then rejoins
+the device on its side only, and informed members keep rejecting it. The
+recovery is to leave again and be readmitted.
 
 A departed device still learns full snapshots, with members and addresses,
 from members that have not yet heard of its departure, and from stale
@@ -238,8 +247,9 @@ moves its pin.
 
 `State.mesh: Option<Mesh>` becomes `meshes: BTreeMap<MeshId, Mesh>` for the
 meshes this device is currently in. #9's `departed` map of departed copies,
-with its 64-entry bound, stays beside it unchanged, so a device can be a member
-of one mesh while holding a departed copy of another.
+with its persisted `departure_order` and 64-entry bound, stays beside it
+unchanged, so a device can be a member of one mesh while holding a departed
+copy of another.
 
 The address book stays global and keyed by device, but snapshots filter it to
 the mesh's current members. On first open, a legacy `mesh` field migrates into a
@@ -345,7 +355,7 @@ interface MeshNode {
 lists current members with their current generation. `devices` is the
 deduplicated set of peers across those meshes, each with one presence value.
 `leaveMesh` gains a mesh ID parameter and returns #9's `LeftMesh`, which
-carries the mesh ID and the remaining and notified member counts. The CLI
+carries the mesh ID, the mesh name, and the remaining and notified member counts. The CLI
 gains `--mesh` selection for `mesh add`, `mesh members`, and the `mesh leave`
 command that #9 added.
 
@@ -440,7 +450,8 @@ file keep their copies, and the UI must say so.
   confirmation described in [Leaving](#leaving-is-a-cooperative-signed-departure).
   Afterwards AFM reports how many members were notified. If some were
   unreachable, it says they learn of the departure from a notified member or
-  the next time they reach this device.
+  the next time they reach this device, while this device keeps that group's
+  departed copy.
 - **Migration:** an existing `AFM mesh` appears as a group with that name.
 - **Privacy copy:**
   - Files added to a group are visible to all of its current and future
@@ -517,11 +528,12 @@ transfer work, and they are planned into PRs once A3 lands:
 - One peer shared through two groups gets one ping per interval and shows one
   presence value.
 - Leaving, single mesh (S1, #9):
-  - D leaves M1 while offline. M1 disappears from D at once, and D refuses M1
-    requests.
+  - D leaves M1 while offline. M1 disappears from D at once. D refuses M1
+    pings and app requests, answers M1 syncs with its departed copy, and
+    accepts only a readmission into M1.
   - A reachable member notified at leave time relays the departure. Members
-    that were unreachable learn it by pull when they next sync with D, and
-    every member eventually lists D as gone.
+    that were unreachable learn it by pull when they next sync with D. While D
+    keeps the copy, every member eventually lists D as gone.
   - A departure relayed by a third party over `depart/1`, or one for another
     mesh, is rejected. A forged departure is rejected, and a stale snapshot
     cannot bring a departed device back.
@@ -532,8 +544,12 @@ transfer work, and they are planned into PRs once A3 lands:
   - A stale introducer's generation-0 enrollment is refused with the
     departure, without consuming the ticket. The introducer retries once with a
     generation-1 readmission, and a second refusal is an error, not a loop.
-  - D leaves M1 without reaching anyone, then founds and leaves M2. D's M1
-    copy survives, and M1 members still learn the departure and can readmit D.
+  - D leaves M1 without reaching anyone, then leaves M2, which has another
+    member. D keeps both copies, in departure order. M1 members still learn the
+    departure by pull and can readmit D. That removes D's M1 copy and keeps
+    its M2 copy.
+  - After a copy is evicted, a stale introducer's generation-0 enrollment
+    rejoins D on D's side only, as documented, and leaving again recovers.
   - Concurrent readmissions by two members converge to one membership.
   - A pre-#9 introducer cannot readmit a departed device, and its error says
     to update it.
