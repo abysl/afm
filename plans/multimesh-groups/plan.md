@@ -261,11 +261,18 @@ Bounds per device and per mesh:
 
 - At most 64 current meshes per device, plus at most 64 departed copies.
 - At most 256 current members per mesh.
-- At most 512 membership records (admissions plus departures) per mesh. PR #9
-  currently allows 256 admission records, with departures bounded by
-  admissions; S2 raises this for the 1 MiB `mesh/2` message limit. When a
-  mesh reaches this bound, it refuses further joins with an explicit "group
-  membership history is full" error. Compacting that history is deferred.
+- At most 256 admission records per mesh, readmissions included, as in #9.
+  Every departure matches an admission and is unique per device and
+  generation, so departures never exceed admissions and a history never
+  exceeds 512 records. Leaving therefore never fails for capacity. A capacity
+  bound on total records would have to either refuse a departure or be
+  exceeded by one, and a reservation checked only at admission time cannot
+  survive concurrent merges. When a mesh reaches 256 admissions, it refuses
+  further joins and rejoins with an explicit "group membership history is
+  full" error. Compacting that history is deferred.
+- The `mesh/2` and `pair/2` message limit is 1 MiB. It fits both extremes:
+  256 current members, and 256 admissions with 256 departures, each with
+  maximum-length names and addresses.
 
 ### Membership records
 
@@ -416,7 +423,7 @@ operations are relayed by other members, and any later permission model needs it
 ### Catalog sync
 
 - A group's state summary is a version vector: the highest contiguous `seq`
-  seen for each `(author, generation)`. It is bounded by the 512 membership records
+  seen for each `(author, generation)`. It is bounded by the 256 admissions
   per mesh.
 - Two members exchange vectors over `afm/catalog/1` and send each other the
   missing ranges. Operations relay transitively, so the author does not need to
@@ -467,7 +474,7 @@ file keep their copies, and the UI must say so.
 - Removing another member, roles, read-only members, and every other
   permission. Member removal is also the only real protection against a
   malicious member, since leaving is not revocation.
-- Compacting membership history beyond 512 records per mesh.
+- Compacting membership history beyond 256 admissions per mesh.
 - Renaming a group. The mesh name is bound into admission signatures, so a
   rename would be an AFM catalog field.
 - Person or account identity. Members are devices by decision, not as an
@@ -488,7 +495,7 @@ but they merge only after that Spirit2 PR merges.
 |---|---|---|---|
 | S1 | spirit2 | [#9](https://github.com/abysl/spirit-library2/pull/9), reviewed as a whole: cooperative leave and rejoin for the single mesh, with review fixes including a per-mesh `departed` map | — |
 | D1 | afm | This implementation plan and the spec alignment with #9 | — |
-| S2 | spirit2 | **Multi-group node core (Rust):** `meshes` map beside #9's `departed` map, migration from the single-mesh state, per-mesh routing on `pair/2`, `mesh/2` and `depart/1`, the heartbeat across all groups, limits (64 groups, 256 members, 512 records), and isolation tests | S1 |
+| S2 | spirit2 | **Multi-group node core (Rust):** `meshes` map beside #9's `departed` map, migration from the single-mesh state, per-mesh routing on `pair/2`, `mesh/2` and `depart/1`, the heartbeat across all groups, limits (64 groups, 256 admissions per mesh), and isolation tests | S1 |
 | S3 | spirit2 | **Bindings and sessions:** FFI, CLI `--mesh`, the `MeshNode` contract, splitting `PairingSession` into node-wide and per-group sessions, and Spirit's `wiki/design/nodes.md` | S2 |
 | A1 | afm | **Groups home:** pin S3; groups list, New group, Join a group (this device's QR), and showing an existing mesh as a group | S3 |
 | A2 | afm | **Members:** member presence, Add device into the selected group (Android scanner), and Paste code on desktop | A1 |
@@ -560,7 +567,8 @@ transfer work, and they are planned into PRs once A3 lands:
   - Re-adding D by scan produces a generation-1 readmission, including when the
     introducer had not yet seen the departure. D's new catalog operations
     start at `seq` 1 without conflicting with its generation-0 operations.
-  - Reaching 512 membership records gives the explicit history-full error.
+  - Reaching 256 admissions gives the explicit history-full error for joins
+    and rejoins, while every current member can still leave.
 - An entry added on A appears on C via B while A is offline. Concurrent
   same-path adds show both entries. Rename and remove converge on every member.
 - A member of M2 cannot fetch a hash that is shared only in M1, even if the
