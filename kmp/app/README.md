@@ -84,5 +84,5 @@ before node shutdown; cancelling a coroutine does not undo remote enrollment. Th
 suspension, force-stop, or app closure can stop heartbeats and eventually make the
 device appear offline. Pairing does not implement file transfer.
 
-See the [implementation plan](../../../plans/qr-mesh-pairing/plan.md) for automated
+See the [implementation plan](../../plans/qr-mesh-pairing/plan.md) for automated
 validation and the outstanding physical camera/cross-network acceptance checks.

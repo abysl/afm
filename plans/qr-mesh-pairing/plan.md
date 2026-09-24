@@ -41,13 +41,13 @@ are out of scope; stopped apps eventually appear offline.
 
 ## Confirmed design and review boundaries
 
-- [Spirit2 #3](https://github.com/abysl/spirit-library2/pull/3) corrected presence
-  and is already merged. Merge [Spirit2 #4](https://github.com/abysl/spirit-library2/pull/4)
-  (KMP sessions), then [Spirit2 #7](https://github.com/abysl/spirit-library2/pull/7)
-  (independent mesh IDs), then [Spirit2 #5](https://github.com/abysl/spirit-library2/pull/5)
-  (docs), then [AFM #7](https://github.com/abysl/afm/pull/7) (app/pin), and finally
-  [AFM #8](https://github.com/abysl/afm/pull/8) (these docs). Use merge commits for
-  these dependent branches so the exact dependency pin stays reachable from main.
+- [Spirit2 #3](https://github.com/abysl/spirit-library2/pull/3) corrected presence.
+  Then [Spirit2 #4](https://github.com/abysl/spirit-library2/pull/4)
+  (KMP sessions), [Spirit2 #7](https://github.com/abysl/spirit-library2/pull/7)
+  (independent mesh IDs), [Spirit2 #5](https://github.com/abysl/spirit-library2/pull/5)
+  (docs), [AFM #7](https://github.com/abysl/afm/pull/7) (app/pin), and
+  [AFM #8](https://github.com/abysl/afm/pull/8) (these docs) were merged in that
+  order. Merge commits kept each exact dependency pin reachable from main.
   Documentation is reviewed separately in each repository, not mixed into these
   implementation diffs. No release/signing changes.
 - Spirit2's `spirit1` ticket is an existing five-minute, single-use bearer

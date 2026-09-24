@@ -2,9 +2,9 @@
 
 The included `afm.delivery` Gradle plugin owns the delivery task graph. Plain
 Kotlin classes own Git provenance, version rules, Android signing, manifest
-validation, and Forgejo publication. The tests use temporary Git repositories,
-fake signing commands, and a loopback HTTP registry; they need no production
-credentials.
+validation, Forgejo publication, and GitHub prerelease publication. The tests use
+temporary Git repositories, fake signing commands, and loopback HTTP servers
+standing in for Forgejo and the GitHub API; they need no production credentials.
 
 From `kmp/`:
 
@@ -31,8 +31,8 @@ That disposable identity is never a release key and is never published. Without
 `AFM_SIGNING_SMOKE_APK`, the integration test is explicitly skipped.
 
 See the [delivery design](../../wiki/design/delivery.md) for the task sequence,
-secret configuration, artifact schema, retry/promotion behavior, and the later
-GitHub Releases/Obtainium plan. AndroidLauncherTest and DevenvAliasesTest replace
+secret configuration, artifact schema, retry/promotion behavior, and the GitHub
+prerelease/Obtainium contract. AndroidLauncherTest and DevenvAliasesTest replace
 the former development-launcher/alias scripts too. They use fake adb/emulator
 processes and isolated command fixtures; no phone is needed for unit tests.
 `devenv shell -- test-launcher` and `devenv shell -- test-aliases` run those
