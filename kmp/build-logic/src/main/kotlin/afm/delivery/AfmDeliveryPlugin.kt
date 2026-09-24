@@ -153,16 +153,32 @@ class AfmDeliveryPlugin : Plugin<Project> {
                 }
             }
         }
+        val webDistribution = kmp.resolve("app/webApp/build/dist/wasmJs/productionExecutable")
+        val web = tasks.register<Tar>("afmWebBundle") {
+            group = "delivery"
+            description = "Archive the production Wasm site for static hosting"
+            dependsOn(":app:webApp:wasmJsBrowserDistribution")
+            destinationDirectory.set(stage.resolve("web").toFile())
+            archiveFileName.set(webBundleName)
+            compression = Compression.GZIP
+            isPreserveFileTimestamps = false
+            isReproducibleFileOrder = true
+            from(webDistribution)
+            doFirst {
+                if (!Files.isRegularFile(webDistribution.resolve("index.html"))) throw DeliveryException("Missing Wasm site: $webDistribution")
+            }
+        }
         tasks.register("afmCiBuild") {
             group = "delivery"
-            description = "Run tests and build unsigned Android and Linux artifacts without signing credentials"
-            dependsOn(reports, ":app:androidApp:assembleRelease", ":app:androidApp:bundleRelease", ":app:desktopApp:packageDeb")
+            description = "Run tests and build unsigned Android, Linux, and Wasm web artifacts without signing credentials"
+            dependsOn(reports, web, ":app:androidApp:assembleRelease", ":app:androidApp:bundleRelease", ":app:desktopApp:packageDeb")
             notCompatibleWithConfigurationCache("Records verified source provenance")
             doLast {
                 val context = deliveryContext()
                 if (SourceContext.read(stage.resolve("native-context.json")) != context) throw DeliveryException("Native source context does not match")
                 unsignedApk(kmp)
                 linuxPackage(kmp, context.version)
+                webBundle(stage)
                 context.write(stage.resolve("context.json"))
             }
         }
@@ -248,6 +264,9 @@ private fun oneFile(directory: Path, glob: String, label: String): Path {
 private fun unsignedApk(kmp: Path) = oneFile(kmp.resolve("app/androidApp/build/outputs/apk/release"), "*-unsigned.apk", "unsigned APK")
 private fun linuxPackage(kmp: Path, version: ReleaseVersion) = oneFile(kmp.resolve("app/desktopApp/build/compose/binaries/main/deb"), "*_${version.name}_amd64.deb", "Linux package")
 
+private const val webBundleName = "web-wasm.tar.gz"
+private fun webBundle(stage: Path) = stage.resolve("web/$webBundleName").also { ReleaseManifest.requireRegularFile(it, "Wasm site archive") }
+
 private fun assembleBundle(kmp: Path, stage: Path, context: SourceContext) {
     val bundle = stage.resolve("bundle")
     if (Files.exists(bundle)) throw DeliveryException("An unfinished local bundle exists; use a fresh CI workspace")
@@ -258,11 +277,14 @@ private fun assembleBundle(kmp: Path, stage: Path, context: SourceContext) {
         val signing = AndroidSigner().sign(unsignedApk(kmp), apk, version.code, version.name, System.getenv())
         val linux = output.resolve("afm-${version.name}-linux-x86_64.deb")
         Files.copy(linuxPackage(kmp, version), linux)
+        val web = output.resolve("afm-${version.name}-web-wasm.tar.gz")
+        Files.copy(webBundle(stage), web)
         val reports = output.resolve("test-reports.tar.gz")
         Files.copy(stage.resolve("reports/test-reports.tar.gz"), reports)
         val artifacts = mutableListOf(
             ReleaseManifest.artifact(apk, "application/vnd.android.package-archive"),
             ReleaseManifest.artifact(linux, "application/vnd.debian.binary-package"),
+            ReleaseManifest.artifact(web, "application/gzip"),
             ReleaseManifest.artifact(reports, "application/gzip"),
         )
         val checksums = output.resolve("checksums.txt")
