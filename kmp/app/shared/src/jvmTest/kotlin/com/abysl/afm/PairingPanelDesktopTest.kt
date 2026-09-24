@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -53,7 +54,7 @@ class PairingPanelDesktopTest {
             300,
         )
         val state = mutableStateOf(PairingState(loading = false, invitation = invitation, invitationSecondsRemaining = 299))
-        setContent { MaterialTheme { PairingPanel(state.value, {}) } }
+        setContent { MaterialTheme { PairingPanel(state.value, onRefreshTicket = {}, onLeaveMesh = {}) } }
         val image = onNodeWithContentDescription("Pairing QR code").captureToImage().toPixelMap()
         val pixels = IntArray(image.width * image.height) { index ->
             val color = image[index % image.width, index / image.width]
@@ -77,6 +78,7 @@ class PairingPanelDesktopTest {
                         peers = listOf(DeviceStatus("node-a", "Desktop", true), DeviceStatus("node-c", "Phone", false)),
                     ),
                     onRefreshTicket = { refreshes++ },
+                    onLeaveMesh = {},
                 )
             }
         }
@@ -85,7 +87,34 @@ class PairingPanelDesktopTest {
         onNodeWithText("Online").assertIsDisplayed()
         onNodeWithText("Offline").assertIsDisplayed()
         onNodeWithText("Pair device").assertDoesNotExist()
+        onNodeWithText("Leave mesh").assertDoesNotExist()
         onNodeWithText("Refresh QR").performClick()
         runOnIdle { assertEquals(1, refreshes) }
+    }
+
+    @Test
+    fun leavingAMeshRequiresConfirmation() = runComposeUiTest {
+        var leaves = 0
+        val state = mutableStateOf(PairingState(loading = false, meshName = "AFM mesh"))
+        setContent {
+            MaterialTheme {
+                PairingPanel(state.value, onRefreshTicket = {}, onLeaveMesh = { leaves++ })
+            }
+        }
+        onNodeWithText("Leave mesh").performClick()
+        onNodeWithText("Leave AFM mesh?").assertIsDisplayed()
+        onNodeWithText("Cancel").performClick()
+        onNodeWithText("Leave AFM mesh?").assertDoesNotExist()
+        runOnIdle { assertEquals(0, leaves) }
+
+        onNodeWithText("Leave mesh").performClick()
+        onNodeWithText("Leave").performClick()
+        onNodeWithText("Leave AFM mesh?").assertDoesNotExist()
+        runOnIdle { assertEquals(1, leaves) }
+
+        runOnIdle { state.value = state.value.copy(busy = true) }
+        onNodeWithText("Leave mesh").assertIsNotEnabled()
+        runOnIdle { state.value = state.value.copy(busy = false, meshName = null) }
+        onNodeWithText("Leave mesh").assertDoesNotExist()
     }
 }

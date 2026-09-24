@@ -15,11 +15,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -41,6 +48,7 @@ private const val qrQuietZoneModules = 4
 fun PairingPanel(
     pairing: PairingState,
     onRefreshTicket: () -> Unit,
+    onLeaveMesh: () -> Unit,
     pairDeviceButton: (@Composable () -> Unit)? = null,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -71,6 +79,14 @@ fun PairingPanel(
             Spacer(Modifier.height(12.dp))
             button()
         }
+        pairing.meshName?.let { meshName ->
+            Spacer(Modifier.height(12.dp))
+            LeaveMeshButton(
+                meshName = meshName,
+                enabled = !pairing.loading && !pairing.busy,
+                onLeaveMesh = onLeaveMesh,
+            )
+        }
         Spacer(Modifier.height(20.dp))
         Text("Paired devices", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
@@ -83,6 +99,42 @@ fun PairingPanel(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LeaveMeshButton(meshName: String, enabled: Boolean, onLeaveMesh: () -> Unit) {
+    var confirming by rememberSaveable { mutableStateOf(false) }
+    OutlinedButton(onClick = { confirming = true }, enabled = enabled) {
+        Text("Leave mesh")
+    }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text("Leave $meshName?") },
+            text = {
+                Text(
+                    "This device stops exchanging status with the mesh, and the other devices " +
+                        "remove it from their lists. To return, have a member scan this device's QR code again.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = false
+                        onLeaveMesh()
+                    },
+                    enabled = enabled,
+                ) {
+                    Text("Leave")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 

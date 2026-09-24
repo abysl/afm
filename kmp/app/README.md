@@ -44,6 +44,10 @@ Android and JVM tests exercise AFM through Kotlin, UniFFI, and Rust.
 4. If a ticket expires or was used, select **Refresh QR** on the device displaying
    it. Tickets are exact Spirit `spirit1` tickets: single-use, valid for up to five
    minutes, and bearer secrets. Show them only to trusted devices.
+5. To leave, select **Leave mesh** on that device and confirm. It notifies the
+   reachable members, disappears from their lists, and shows a fresh QR. To
+   return, have a remaining member scan that QR; a scan from the device itself
+   instead founds a new mesh.
 
 Only Android offers **Pair device** and opens a bundled camera scanner; there is
 no external scanning service. Permission/scanner launches stay disabled until
@@ -67,6 +71,18 @@ New meshes use a random `mesh1_...` ID independent of device identity. Members
 need compatible Spirit versions to enroll in them. Existing legacy meshes retain
 their signed IDs rather than silently migrating. The founder is not an always-on
 coordinator; any member can enroll another fresh device.
+
+Leaving is a Spirit membership operation; AFM only renders the confirmation and
+calls `PairingSession.leaveMesh`. All native targets offer **Leave mesh** while
+paired. The device keeps its node identity and name, and any member, including
+the founder, can leave without affecting the rest of the mesh. Members that were
+offline learn of the departure from a notified member, or from this device the
+next time they reach it while AFM is running. Leaving is not key revocation, and
+no device can remove another. Members running Spirit versions from before
+departures keep listing the device and cannot exchange membership once it
+rejoins. See Spirit's
+[leaving and rejoining](../../deps/spirit2/wiki/design/nodes.md#leaving-and-rejoining)
+design.
 
 Spirit exchanges authenticated ping/pong every five seconds while the native node
 is running. Green/Online means a ping or pong arrived from that identity less than

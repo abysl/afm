@@ -53,6 +53,7 @@ fun main() = application {
             store = store,
             pairing = state.copy(busy = state.busy || closing),
             onRefreshTicket = { scope.launch { pairing.refreshTicket() } },
+            onLeaveMesh = { scope.launch { pairing.leaveMesh() } },
         )
     }
 }

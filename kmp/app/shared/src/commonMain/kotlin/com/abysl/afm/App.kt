@@ -30,6 +30,7 @@ fun App(
     store: BlobStore? = null,
     pairing: PairingState? = null,
     onRefreshTicket: () -> Unit = {},
+    onLeaveMesh: () -> Unit = {},
     pairDeviceButton: (@Composable () -> Unit)? = null,
 ) {
     MaterialTheme {
@@ -47,6 +48,7 @@ fun App(
                 PairingPanel(
                     pairing = it,
                     onRefreshTicket = onRefreshTicket,
+                    onLeaveMesh = onLeaveMesh,
                     pairDeviceButton = pairDeviceButton,
                 )
                 Spacer(Modifier.height(24.dp))

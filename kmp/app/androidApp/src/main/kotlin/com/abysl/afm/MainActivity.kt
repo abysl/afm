@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
                 store = model.store,
                 pairing = pairing,
                 onRefreshTicket = model::refreshTicket,
+                onLeaveMesh = model::leaveMesh,
                 pairDeviceButton = {
                     AndroidPairDeviceButton(
                         enabled = !pairing.loading && !pairing.busy && pendingScan == null,

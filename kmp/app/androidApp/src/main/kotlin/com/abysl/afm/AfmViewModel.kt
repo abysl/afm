@@ -49,4 +49,8 @@ class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle)
     fun refreshTicket() {
         viewModelScope.launch { pairing.refreshTicket() }
     }
+
+    fun leaveMesh() {
+        viewModelScope.launch { pairing.leaveMesh() }
+    }
 }
