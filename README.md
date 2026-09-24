@@ -63,7 +63,8 @@ self-hosted Woodpecker → versioned signed GitHub prereleases. No GitHub Action
 runner is required. Every successful non-superseded main build publishes immutable
 `v0.1.N` prerelease Android and Linux assets after draft upload/verification; stale
 and partial builds never advance the testing channel. Obtainium sorts the numeric
-tags with prerelease support enabled. Web artifact publication is deferred until
+tags with prerelease support enabled. CI archives the Wasm production site into the
+internal bundle for static hosting; public web releases are deferred until
 both browser targets are functionally useful and pass their own CI acceptance. Deployment configuration and credentials remain outside this
 repository. See the [delivery design](wiki/design/delivery.md) for exact version,
 asset, retry, and phone-update contracts.
