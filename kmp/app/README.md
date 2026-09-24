@@ -55,6 +55,14 @@ original receiver ticket is then withdrawn. Subsequent scans continue using that
 mesh rather than replacing successful pairings. To join an existing mesh, have
 one of its members scan the fresh device's ticket, not the other way around.
 
+The Android button is stateless. `AfmViewModel` owns a `PairingScannerModel`
+that decides whether to request permission or scan, suppresses duplicate input,
+and handles results/errors. Its pending step lives in `SavedStateHandle`;
+restoration waits for the existing activity result instead of launching again.
+The Compose adapter only registers Android launchers, reads current camera and
+permission availability at click time, and executes the model's returned command.
+The model never retains an Activity, Context, or launcher.
+
 New meshes use a random `mesh1_...` ID independent of device identity. Members
 need compatible Spirit versions to enroll in them. Existing legacy meshes retain
 their signed IDs rather than silently migrating. The founder is not an always-on

@@ -142,6 +142,21 @@ devenv shell -- ./gradlew :app:shared:jvmTest :app:desktopApp:classes :app:andro
   signing tuple, restart persistence, and enrollment without the founder online.
 - No release was signed/published and no final-review APK was installed on a device.
 
+### Scanner model refactor validation
+
+- Moved scanner decisions and saved pending state to `PairingScannerModel`, owned
+  by `AfmViewModel`. The button only renders enabled/onClick; Android launchers
+  remain in a small lifecycle-bound Compose adapter.
+- Twelve Android host unit tests pass for permission flow, disabled/no-camera
+  requests, duplicate requests/results, cancellation, launch failures, and model
+  restoration from saved state. These test model behavior, not real OS dialogs.
+- `:app:androidApp:testDebugUnitTest :app:androidApp:assembleDebug
+  :app:shared:jvmTest :app:desktopApp:classes` passed, as did the build-logic tests.
+  An `afmCiBuild -PafmRelease=true --dry-run` confirmed the Android unit tests are
+  included in CI; their results/reports are collected with the existing evidence.
+- Activity recreation and camera behavior were not re-tested on a device after
+  this refactor. No new signing, installation, or publication was performed.
+
 Still unverified: physical-camera decoding, three physical A/B/C devices across
 real networks, installed Linux-package portability, and iOS runtime. JS/Wasm were
 compiled, not claimed to support native pairing. No Android foreground service
