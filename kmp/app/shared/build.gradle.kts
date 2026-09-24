@@ -89,6 +89,8 @@ kotlin {
             implementation(libs.compose.uiTooling)
         }
         commonMain.dependencies {
+            api("blue.rae.spirit:spirit-mesh:0.1.0")
+            implementation(libs.kotlinx.coroutinesCore)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.material3)
@@ -101,16 +103,14 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
-        androidMain.dependencies {
-            implementation("blue.rae.spirit:spirit-sdk:0.1.0")
-            implementation(libs.kotlinx.coroutinesCore)
-        }
-        jvmMain.dependencies {
-            implementation("blue.rae.spirit:spirit-sdk:0.1.0")
-            implementation(libs.kotlinx.coroutinesCore)
+        named("afmMain").dependencies {
+            api("blue.rae.spirit:spirit-sdk:0.1.0")
         }
         jvmTest.dependencies {
+            implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesCore)
+            implementation("org.jetbrains.compose.ui:ui-test-junit4:${libs.versions.composeMultiplatform.get()}")
+            implementation("com.google.zxing:core:3.5.3")
         }
         named("androidDeviceTest") {
             dependencies {
