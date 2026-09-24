@@ -23,6 +23,7 @@ dependencies {
 
     implementation(libs.compose.uiToolingPreview)
     debugImplementation(libs.compose.uiTooling)
+    testImplementation(libs.kotlin.testJunit)
 }
 
 android {
