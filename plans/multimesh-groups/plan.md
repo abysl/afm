@@ -84,8 +84,11 @@ against that mesh only:
 - Membership snapshots and addresses sent for mesh M contain only M's members.
   `Snapshot::verify` already rejects addresses of non-members.
 - A request for a mesh the responder is not in, or that the requester is not
-  in, gets the same generic failure after the same verification work, so
-  neither the reply nor its timing reveals membership. No metadata is returned.
+  in, gets the same generic failure after the same verification work. The
+  responder checks the requester's membership, including a departure it
+  already knows about, before any merge. Neither the reply nor its timing
+  reveals whether the responder is in the mesh; any remaining measured gap is
+  recorded in Spirit's node design. No metadata is returned.
   The one exception is a device that left a mesh: it answers that mesh's
   members with its own
   departed copy, so they learn it left.
@@ -253,25 +256,31 @@ with its persisted `departure_order` and 64-entry bound, stays beside it
 unchanged, so a device can be a member of one mesh while holding a departed
 copy of another.
 
-The address book stays global and keyed by device, and each stored address
-records where it came from. It is either **direct**, learned from the device
-itself over an authenticated connection or from its own snapshot entry, or a
-**hint learned in mesh M**, relayed by a third party. `snapshot(M)` includes
-only direct addresses and hints learned in M, and only for M's current
-members. Otherwise a member of one group could plant a relay or IP address for
-a shared device, and it would be forwarded to another group's members, whose
-addresses it would then reveal. Dialing may use any stored address. Senders
-trim their own and forwarded addresses to 16 transports, each at most 160
-serialized bytes, so one oversized address never breaks a snapshot. Real
-iroh relay URLs are about 47 bytes.
+The address book is keyed by device. For each device it holds at most one
+**direct** address, taken from the device's own entry in a snapshot it sent,
+and at most one **hint per mesh**, relayed by a third party in that mesh. An
+address cannot exist without its source. `snapshot(M)` includes, for each of
+M's current members, the direct address if there is one, otherwise the hint
+learned in M. A hint from another mesh is never forwarded, so a member of one
+group cannot plant a relay or IP address for a shared device and have it
+forwarded to another group's members, whose addresses it would then reveal.
+A newer hint from the same mesh replaces the older one, and a hint never
+replaces a direct address. A mesh's hints are dropped when this device leaves
+that mesh, or when the device they describe stops being a current member of
+it. Dialing may use any stored address, direct first. Senders trim their own
+and forwarded addresses to 16 transports, each at most 160 serialized bytes, so
+one oversized address never breaks a snapshot. Real iroh relay URLs are about
+47 bytes.
 
 On first open, a legacy `mesh` field migrates into a one-entry map through the
-existing atomic write, and its stored addresses count as direct. Legacy mesh
-IDs and signatures are kept unchanged. Older Spirit builds ignore unknown
-fields, so the new state writes a `"mesh"` sentinel string that their
-deserializer rejects. They therefore fail to open a migrated directory instead
-of reading it as not enrolled and erasing every group on their next write. The
-release notes must say that downgrading is not supported.
+existing atomic write. Its stored addresses become hints for that mesh, because
+the old format did not record which ones came from the device itself; direct
+contact upgrades them. Legacy mesh IDs and signatures are kept unchanged. Older
+Spirit builds ignore unknown fields, so the new state writes a `"mesh"`
+sentinel string that their deserializer rejects. They therefore fail to open a
+migrated directory instead of reading it as not enrolled and erasing every
+group on their next write. The release notes must say that downgrading is not
+supported.
 
 Bounds per device and per mesh:
 
@@ -339,11 +348,11 @@ so no `/1` compatibility path is kept.
 
 | Protocol | Behavior |
 |---|---|
-| `spirit/pair/2` | The receiver joins the snapshot's mesh if it is new, or merges into it if it is already a member, even if it belongs to other meshes. A receiver holding a departed copy of that mesh refuses a generation-0 enrollment from an introducer with the same mesh identity, and replies with its departure. The introducer merges that reply and retries once with a readmission at the next generation, using the same ticket, which is still unconsumed. Other refusals use one generic reply. |
+| `spirit/pair/2` | The receiver joins the snapshot's mesh if it is new, or merges into it if it is already a member, even if it belongs to other meshes. A receiver holding a departed copy of that mesh refuses a generation-0 enrollment from an introducer with the same mesh identity, and replies with its departure. The introducer merges that reply and retries once with a readmission at the next generation, using the same ticket, which is still unconsumed. The introducer merges the joiner's reply only into the mesh it admitted the joiner to, with the same identity, so a joiner cannot put the introducer into another mesh. Other refusals use one generic reply. |
 | `spirit/mesh/2` | Uses the same snapshot exchange, routed by the request snapshot's mesh ID, with a 1 MiB message limit. The request snapshot is verified before any local state is consulted. The responder replies with that mesh's snapshot only if both sides are current members. Merging never creates a mesh; only `pair/2` joins one. A device holding a departed copy returns it only to members of a request snapshot with the same mesh identity: same ID, name, and founder. Knowing a mesh ID is not a credential. Every other case, including a device the responder knows has departed, gets the generic failure. |
 | `spirit/depart/1` | Added by #9. Pushes the departing device's own signed departure for one mesh, once, at leave time. Receivers verify before consulting local state, and accept only the authenticated sender's own departure for that mesh. |
 | `spirit/ping/1` | Unchanged wire format. It is authorized if the remote device is a current member of any mesh this device is currently in. |
-| Heartbeat loop | Covers every current member of every mesh this device is currently in. Each peer gets one ping per interval. Before it, each mesh shared with that peer is synced independently and concurrently, within the heartbeat deadline. One mesh's sync failure is recorded but never blocks the other meshes or the ping. Departed copies are delivered by pull and are never heartbeated. |
+| Heartbeat loop | Covers every current member of every mesh this device is currently in. Each peer gets one ping per interval. Before it, each mesh shared with that peer is synced independently and concurrently within a named sync budget: the heartbeat deadline minus a reserve for the ping. When the budget runs out, the meshes still pending are recorded by ID. A manual ping syncs with the normal request deadline instead. One mesh's sync failure is recorded but never blocks the other meshes or the ping. Departed copies are delivered by pull and are never heartbeated. |
 
 ### New primitives used by the catalog and transfer
 
@@ -512,8 +521,8 @@ but they merge only after that Spirit2 PR merges.
 |---|---|---|---|
 | S1 | spirit2 | [#9](https://github.com/abysl/spirit-library2/pull/9), reviewed as a whole: cooperative leave and rejoin for the single mesh, with review fixes including a per-mesh `departed` map | — |
 | D1 | afm | This implementation plan and the spec alignment with #9 | — |
-| S2 | spirit2 | **Multi-group node core (Rust):** `meshes` map beside #9's `departed` map, migration from the single-mesh state, per-mesh routing on `pair/2`, `mesh/2` and `depart/1`, the heartbeat across all groups, limits (64 groups, 256 admissions per mesh), and isolation tests | S1 |
-| S3 | spirit2 | **Bindings and sessions:** FFI, CLI `--mesh`, the `MeshNode` contract, splitting `PairingSession` into node-wide and per-group sessions, and the binding sections of Spirit's `wiki/design/nodes.md` and `kmp/README.md` (S2 already rewrote the node design) | S2 |
+| S2 | spirit2 | **Multi-group node core (Rust):** `meshes` map beside #9's `departed` map, migration from the single-mesh state, per-mesh routing on `pair/2`, `mesh/2` and `depart/1`, the heartbeat across all groups, limits (64 groups, 256 admissions per mesh), and isolation tests. The CLI stays usable with several meshes: `status` and `mesh members` list every mesh, and `mesh add` and `mesh leave` take `--mesh`. The FFI stays single-mesh with a clear error, because AFM pins only S3 | S1 |
+| S3 | spirit2 | **Bindings and sessions:** the multi-mesh FFI, the `MeshNode` contract, splitting `PairingSession` into node-wide and per-group sessions, and the binding sections of Spirit's `wiki/design/nodes.md` and `kmp/README.md` (S2 already rewrote the node design) | S2 |
 | A1 | afm | **Groups home:** pin S3; groups list, New group, Join a group (this device's QR), and showing an existing mesh as a group | S3 |
 | A2 | afm | **Members:** member presence, Add device into the selected group (Android scanner), and Paste code on desktop | A1 |
 | A3 | afm | **Leave group:** menu action and confirmation on every platform, replacing [AFM #13](https://github.com/abysl/afm/pull/13)'s single-mesh leave | A2 |
