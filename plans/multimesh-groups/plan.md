@@ -512,16 +512,17 @@ file keep their copies, and the UI must say so.
 
 ## Implementation PRs
 
-Each PR is sized for one review and stacks on the one before it. Spirit2 PRs
-merge with merge commits, so the exact commit AFM pins stays reachable from
-Spirit2 `main`. AFM PRs may pin a pushed Spirit2 branch head while in review,
-but they merge only after that Spirit2 PR merges.
+Each PR is sized for one review, at most 800 changed lines including tests
+and docs, and stacks on the one before it. Spirit2 PRs merge with merge
+commits, so the exact commit AFM pins stays reachable from Spirit2 `main`. AFM
+PRs may pin a pushed Spirit2 branch head while in review, but they merge only
+after that Spirit2 PR merges.
 
 | # | Repo | PR | Depends on |
 |---|---|---|---|
-| S1 | spirit2 | [#9](https://github.com/abysl/spirit-library2/pull/9), reviewed as a whole: cooperative leave and rejoin for the single mesh, with review fixes including a per-mesh `departed` map | — |
+| S1 | spirit2 | [#10](https://github.com/abysl/spirit-library2/pull/10)–[#13](https://github.com/abysl/spirit-library2/pull/13), four stacked PRs that split [#9](https://github.com/abysl/spirit-library2/pull/9) with an identical final tree: cooperative leave and rejoin for the single mesh, with review fixes including a per-mesh `departed` map | — |
 | D1 | afm | This implementation plan and the spec alignment with #9 | — |
-| S2 | spirit2 | **Multi-group node core (Rust):** `meshes` map beside #9's `departed` map, migration from the single-mesh state, per-mesh routing on `pair/2`, `mesh/2` and `depart/1`, the heartbeat across all groups, limits (64 groups, 256 admissions per mesh), and isolation tests. The CLI stays usable with several meshes: `status` and `mesh members` list every mesh, and `mesh add` and `mesh leave` take `--mesh`. The FFI stays single-mesh with a clear error, because AFM pins only S3 | S1 |
+| S2 | spirit2 | [#14](https://github.com/abysl/spirit-library2/pull/14)–[#22](https://github.com/abysl/spirit-library2/pull/22), nine stacked PRs. **Multi-group node core (Rust):** `meshes` map beside #9's `departed` map, migration from the single-mesh state, per-mesh routing on `pair/2`, `mesh/2` and `depart/1`, the heartbeat across all groups, limits (64 groups, 256 admissions per mesh), and isolation tests. The CLI stays usable with several meshes: `status` and `mesh members` list every mesh, and `mesh add` and `mesh leave` take `--mesh`. The FFI stays single-mesh with a clear error, because AFM pins only S3 | S1 |
 | S3 | spirit2 | **Bindings and sessions:** the multi-mesh FFI, the `MeshNode` contract, splitting `PairingSession` into node-wide and per-group sessions, and the binding sections of Spirit's `wiki/design/nodes.md` and `kmp/README.md` (S2 already rewrote the node design) | S2 |
 | A1 | afm | **Groups home:** pin S3; groups list, New group, Join a group (this device's QR), and showing an existing mesh as a group | S3 |
 | A2 | afm | **Members:** member presence, Add device into the selected group (Android scanner), and Paste code on desktop | A1 |
