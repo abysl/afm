@@ -62,7 +62,7 @@ fun App(
                 } else {
                     groupBackHandler?.invoke { selectedGroupId = null }
                     GroupScreen(group, state.nodeId, !state.loading && !state.busy && state.nodeId.isNotEmpty(),
-                        actions.adding, onBack = { selectedGroupId = null }, onAddDevice = onAddDevice,
+                        actions.adding, addedTicket = actions.addedTicket, onBack = { selectedGroupId = null }, onAddDevice = onAddDevice,
                         scanDeviceButton = scanDeviceButton,
                     )
                     failureMessage(state.failure, state.error, actions.lastTicket == state.invitation?.ticket && actions.lastTicket != null)?.let { error ->

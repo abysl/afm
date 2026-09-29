@@ -69,6 +69,24 @@ class GroupsSessionTest {
     }
 
     @Test
+    fun mapsTypedErrorsAndClearsThem() = runBlocking {
+        val node = FakeGroupsNode()
+        val session = MeshSession({ node })
+        val job = launch { session.run() }
+        waitUntil { !session.state.value.loading }
+        node.failure = MeshFailure.MeshLimit
+        assertNull(session.createGroup("Other"))
+        assertEquals("This device has reached the 64-group limit. Leave a group before creating or joining another group.", failureMessage(session.state.value.failure, session.state.value.error))
+        session.clearMessages()
+        assertNull(session.state.value.failure)
+        assertNull(session.state.value.error)
+        job.cancelAndJoin()
+        assertEquals("Ticket rejected. Ask for a fresh QR code.", failureMessage(MeshFailure.TicketRejected, null))
+        assertEquals("Device unreachable. Check its connection and try again.", failureMessage(MeshFailure.Unavailable, null))
+        assertEquals("AFM's device data is in use by another AFM window or process. Close it and restart AFM.", failureMessage(MeshFailure.NodeBusy, null))
+    }
+
+    @Test
     fun restoredScanWaitsForInitialStatusBeforeAdding() = runBlocking {
         val opened = CompletableDeferred<MeshNode>()
         val node = FakeGroupsNode().apply { meshes += MeshStatus("mesh1", "Family", listOf(MeshMember("self", "My device", 0))) }
@@ -80,6 +98,60 @@ class GroupsSessionTest {
         opened.complete(node)
         waitUntil { node.addedTo == "mesh1" }
         assertEquals(null, mesh.state.value.failure)
+        sessionJob.cancelAndJoin()
+    }
+
+    @Test
+    fun scannedTicketQueuesWhileRefreshIsBusy() = runBlocking {
+        val node = FakeGroupsNode().apply { meshes += MeshStatus("mesh1", "Family", listOf(MeshMember("self", "My device", 0))) }
+        val mesh = MeshSession({ node })
+        val sessionJob = launch { mesh.run() }
+        waitUntil { !mesh.state.value.loading && mesh.state.value.invitation != null }
+        node.pairGate = CompletableDeferred()
+        val refresh = launch { mesh.refreshTicket() }
+        waitUntil { mesh.state.value.busy }
+        val actions = GroupActions(mesh, this)
+        actions.addScannedTicket("mesh1", "spirit1anotherdevice")
+        assertNull(node.addedTo)
+        node.pairGate?.complete(Unit)
+        refresh.join()
+        waitUntil { node.addedTo == "mesh1" }
+        sessionJob.cancelAndJoin()
+    }
+
+    @Test
+    fun rejectsAddWhenNodeIsUnavailableOrAnotherActionIsBusy() = runBlocking {
+        val node = FakeGroupsNode().apply { meshes += MeshStatus("mesh1", "Family", listOf(MeshMember("self", "My device", 0))) }
+        val mesh = MeshSession({ node })
+        val actions = GroupActions(mesh, this)
+        actions.addDevice("mesh1", "spirit1anotherdevice")
+        assertEquals("Device is not ready. Reopen AFM and try again.", mesh.state.value.error)
+        val sessionJob = launch { mesh.run() }
+        waitUntil { !mesh.state.value.loading }
+        node.pairGate = CompletableDeferred()
+        val refresh = launch { mesh.refreshTicket() }
+        waitUntil { mesh.state.value.busy }
+        actions.addDevice("mesh1", "spirit1anotherdevice")
+        assertEquals("Another action is in progress. Try again when it finishes.", mesh.state.value.error)
+        assertNull(node.addedTo)
+        node.pairGate?.complete(Unit)
+        refresh.join()
+        sessionJob.cancelAndJoin()
+    }
+
+    @Test
+    fun ownerKeepsAddingAfterScreenIsRecreated() = runBlocking {
+        val node = FakeGroupsNode().apply { meshes += MeshStatus("mesh1", "Family", listOf(MeshMember("self", "My device", 0))) }
+        val mesh = MeshSession({ node })
+        val sessionJob = launch { mesh.run() }
+        waitUntil { !mesh.state.value.loading }
+        val actions = GroupActions(mesh, this)
+        val previousScreenAction = actions::addDevice
+        previousScreenAction("mesh1", "spirit1anotherdevice")
+        val recreatedScreenState = actions.state
+        waitUntil { node.addedTo == "mesh1" && !recreatedScreenState.value.adding }
+        assertEquals("mesh1", node.addedTo)
+        assertEquals("spirit1anotherdevice", actions.state.value.addedTicket)
         sessionJob.cancelAndJoin()
     }
 
@@ -95,9 +167,11 @@ class GroupsSessionTest {
 internal class FakeGroupsNode : MeshNode {
     val meshes = mutableListOf<MeshStatus>()
     var failure: MeshFailure? = null
+    var leaveGate: CompletableDeferred<Unit>? = null
     var pairGate: CompletableDeferred<Unit>? = null
     var closed = false
     var addedTo: String? = null
+    var left: String? = null
     override suspend fun status() = NodeStatus("self", "My device", meshes.toList(), emptyList(), true)
     override suspend fun createMesh(name: String): String {
         failure?.let { throw MeshNodeException(it) }
@@ -114,6 +188,13 @@ internal class FakeGroupsNode : MeshNode {
         return "New device"
     }
     override suspend fun ping(device: String) = NodePong("Device", 1)
-    override suspend fun leaveMesh(meshId: String): LeftMesh = error("Not used by group add")
+    override suspend fun leaveMesh(meshId: String): LeftMesh {
+        leaveGate?.await()
+        failure?.let { throw MeshNodeException(it) }
+        left = meshId
+        val mesh = meshes.single { it.id == meshId }
+        meshes.remove(mesh)
+        return LeftMesh(meshId, mesh.name, 2, 1)
+    }
     override suspend fun shutdown() { closed = true }
 }

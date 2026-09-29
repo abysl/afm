@@ -9,12 +9,15 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import blue.rae.spirit.sdk.PairingInvitation
+import blue.rae.spirit.sdk.MeshFailure
 import blue.rae.spirit.sdk.MeshState
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
@@ -66,4 +69,15 @@ class GroupsPanelDesktopTest {
         onNodeWithText("Join QR expired. Refresh it before joining a group.").assertIsDisplayed()
     }
 
+    @Test
+    fun filtersControlCharactersAndExplainsTypedInvalidInput() = runComposeUiTest {
+        assertEquals("Invalid input. Use a valid ticket or a group name of 1–128 UTF-8 bytes with no control characters.", failureMessage(MeshFailure.Invalid, "Could not create group"))
+        assertEquals(failureMessage(MeshFailure.Invalid, "Could not create group"), failureMessage(MeshFailure.Invalid, "Another message"))
+        var created: String? = null
+        setContent { MaterialTheme { GroupsPanel(MeshState(loading = false, nodeId = "self"), { created = it }, {}, {}, {}) } }
+        onNodeWithText("New group").performClick()
+        onNodeWithText("Group name").performTextInput("F\namily")
+        onNodeWithText("Create group").performClick()
+        runOnIdle { assertEquals("Family", created) }
+    }
 }
