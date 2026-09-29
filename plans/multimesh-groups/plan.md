@@ -118,7 +118,7 @@ The `spirit1` ticket stays exactly as it is: "add me to a group", with no group
 named. The member scanning it chooses the target by opening a group and choosing
 **Add device**. The receiving device accepts enrollment into a new mesh instead
 of rejecting it because it already belongs to another one. It shows
-"Added to *group* by *device*".
+"Joined *group*". The node doesn't report which device added it.
 
 The ticket remains a five-minute, single-use bearer credential. Showing it lets
 its holder add the device to any one group of their choosing, and the privacy
@@ -365,13 +365,13 @@ so no `/1` compatibility path is kept.
 ### KMP contract sketch
 
 ```kotlin
-data class MeshMember(val id: String, val generation: Long)
+data class MeshMember(val id: String, val name: String, val generation: Long)
 data class MeshStatus(
     val id: String,
     val name: String,
     val members: List<MeshMember>,
 )
-data class NodeStatus(val id: String, val name: String, val meshes: List<MeshStatus>, val devices: List<NodePeer>)
+data class NodeStatus(val id: String, val name: String, val meshes: List<MeshStatus>, val peers: List<NodePeer>)
 
 interface MeshNode {
     suspend fun status(): NodeStatus
@@ -385,7 +385,7 @@ interface MeshNode {
 ```
 
 `meshes` lists only the meshes this device is currently in, and `members`
-lists current members with their current generation. `devices` is the
+lists current members with their current generation. `peers` is the
 deduplicated set of peers across those meshes, each with one presence value.
 `leaveMesh` gains a mesh ID parameter and returns #9's `LeftMesh`, which
 carries the mesh ID, the mesh name, and the remaining and notified member counts. The CLI
