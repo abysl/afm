@@ -101,6 +101,7 @@ kotlin {
             implementation(libs.androidx.lifecycle.runtimeCompose)
         }
         commonTest.dependencies {
+            implementation("blue.rae.spirit:spirit-mesh-testing:0.1.0")
             implementation(libs.kotlin.test)
         }
         named("afmMain").dependencies {
