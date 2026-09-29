@@ -1,10 +1,24 @@
 package com.abysl.afm
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -16,7 +30,7 @@ internal fun failureMessage(failure: MeshFailure?, fallback: String?, ownTicket:
     MeshFailure.Unavailable -> "Device unreachable. Check its connection and try again."
     MeshFailure.MeshLimit -> "This device has reached the 64-group limit. Leave a group before creating or joining another group."
     MeshFailure.NodeBusy -> "AFM's device data is in use by another AFM window or process. Close it and restart AFM."
-    MeshFailure.Invalid -> if (fallback == "Could not create group") "Group name must be 1 to 128 UTF-8 bytes." else fallback
+    MeshFailure.Invalid -> "Invalid input. Use a valid ticket or a group name of 1–128 UTF-8 bytes with no control characters."
     MeshFailure.NotMember -> "This device is no longer in that group."
     MeshFailure.NodeClosed -> "AFM's node stopped. Restart AFM."
     MeshFailure.Node -> fallback ?: "Could not contact the device. Try again."
@@ -73,7 +87,10 @@ fun GroupsPanel(
         title = { Text("New group") },
         text = {
             Column {
-                OutlinedTextField(name, { if (it.encodeToByteArray().size <= 128) name = it }, label = { Text("Group name") }, singleLine = true)
+                OutlinedTextField(name, { entered ->
+                    val filtered = entered.filterNot { it.code < 32 || it.code in 127..159 }
+                    if (filtered.encodeToByteArray().size <= 128) name = filtered
+                }, label = { Text("Group name") }, singleLine = true)
                 Text("${name.encodeToByteArray().size}/128 UTF-8 bytes maximum")
                 Text("Any member you add can see the group and add other devices.")
             }
