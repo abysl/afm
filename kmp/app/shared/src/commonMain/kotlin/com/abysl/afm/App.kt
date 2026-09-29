@@ -1,6 +1,6 @@
 package com.abysl.afm
 
-import blue.rae.spirit.sdk.PairingState
+import blue.rae.spirit.sdk.MeshState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
@@ -28,10 +29,16 @@ import kotlinx.coroutines.launch
 @Preview
 fun App(
     store: BlobStore? = null,
-    pairing: PairingState? = null,
+    mesh: MeshState? = null,
+    onCreateGroup: (String) -> Unit = {},
     onRefreshTicket: () -> Unit = {},
-    pairDeviceButton: (@Composable () -> Unit)? = null,
+    onClearMessages: () -> Unit = {},
+    actions: GroupActionState = GroupActionState(),
+    onAddDevice: (String, String) -> Unit = { _, _ -> },
+    groupBackHandler: (@Composable (() -> Unit) -> Unit)? = null,
+    scanDeviceButton: (@Composable (String) -> Unit)? = null,
 ) {
+    var selectedGroupId by rememberSaveable { mutableStateOf<String?>(null) }
     MaterialTheme {
         Column(
             modifier = Modifier
@@ -43,12 +50,30 @@ fun App(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("AFM on ${getPlatform().name}", style = MaterialTheme.typography.titleMedium)
-            pairing?.let {
-                PairingPanel(
-                    pairing = it,
-                    onRefreshTicket = onRefreshTicket,
-                    pairDeviceButton = pairDeviceButton,
-                )
+            mesh?.let { state ->
+                val group = state.groups.firstOrNull { it.id == selectedGroupId }
+                if (group == null) {
+                    GroupsPanel(
+                        state = state, onCreateGroup = onCreateGroup, onRefreshTicket = onRefreshTicket,
+                        onClearMessages = onClearMessages,
+                        onOpenGroup = { selectedGroupId = it },
+                        lastTicket = actions.lastTicket,
+                    )
+                } else {
+                    groupBackHandler?.invoke { selectedGroupId = null }
+                    GroupScreen(group, state.nodeId, !state.loading && !state.busy && state.nodeId.isNotEmpty(),
+                        actions.adding, onBack = { selectedGroupId = null }, onAddDevice = onAddDevice,
+                        scanDeviceButton = scanDeviceButton,
+                    )
+                    failureMessage(state.failure, state.error, actions.lastTicket == state.invitation?.ticket && actions.lastTicket != null)?.let { error ->
+                        Text(error, color = MaterialTheme.colorScheme.error)
+                        Button(onClick = onClearMessages) { Text("Dismiss error") }
+                    }
+                    state.notice?.let { notice ->
+                        Text(notice)
+                        Button(onClick = onClearMessages) { Text("Dismiss notice") }
+                    }
+                }
                 Spacer(Modifier.height(24.dp))
             }
             if (store == null) {

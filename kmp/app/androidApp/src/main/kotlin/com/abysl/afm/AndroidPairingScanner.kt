@@ -15,12 +15,12 @@ import com.journeyapps.barcodescanner.ScanOptions
 @Composable
 fun AndroidPairDeviceButton(enabled: Boolean, onClick: () -> Unit) {
     Button(onClick = onClick, enabled = enabled) {
-        Text("Pair device")
+        Text("Scan QR code")
     }
 }
 
 @Composable
-fun rememberPairingScannerLauncher(model: PairingScannerModel): () -> Unit {
+fun rememberPairingScannerLauncher(model: PairingScannerModel): (String) -> Unit {
     val context = LocalContext.current
     val options = remember { pairingScanOptions() }
     val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
@@ -32,8 +32,8 @@ fun rememberPairingScannerLauncher(model: PairingScannerModel): () -> Unit {
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (model.onPermissionResult(granted) == PairingScanStep.Camera) launchCamera()
     }
-    return {
-        val step = model.requestScan(
+    return { meshId ->
+        val step = model.requestScan(meshId,
             hasCamera = context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY),
             permissionGranted = context.checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED,
         )
@@ -59,5 +59,5 @@ private fun pairingScanOptions() = ScanOptions().apply {
     setDesiredBarcodeFormats(ScanOptions.QR_CODE)
     setBeepEnabled(false)
     setOrientationLocked(false)
-    setPrompt("Scan a device pairing QR code")
+    setPrompt("Scan a device QR code for this group")
 }

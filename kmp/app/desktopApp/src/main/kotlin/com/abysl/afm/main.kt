@@ -8,7 +8,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
-import blue.rae.spirit.sdk.PairingSession
+import blue.rae.spirit.sdk.MeshSession
 import blue.rae.spirit.sdk.SpiritNode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
@@ -18,17 +18,17 @@ import kotlinx.coroutines.withContext
 fun main() = application {
     val home = System.getProperty("user.home")
     val store = remember { openBlobStore("$home/.spirit2/afm") }
-    val pairing = remember {
-        PairingSession(
+    val mesh = remember {
+        MeshSession(
             nodeFactory = { SpiritNode.open("$home/.spirit2/afm-node", "AFM desktop") },
-            meshName = "AFM mesh",
         )
     }
     val scope = rememberCoroutineScope()
+    val actions = remember(mesh) { GroupActions(mesh, scope) }
     val nodeJob = remember {
         scope.launch {
-            runPairingUntilOwnerCancellation(
-                pairing::run,
+            runMeshUntilOwnerCancellation(
+                mesh::run,
                 onOwnerTeardown = {
                     withContext(Dispatchers.IO) { store?.close() }
                 },
@@ -36,7 +36,8 @@ fun main() = application {
         }
     }
     var closing by remember { mutableStateOf(false) }
-    val state by pairing.state.collectAsState()
+    val state by mesh.state.collectAsState()
+    val actionState by actions.state.collectAsState()
     Window(
         onCloseRequest = {
             if (!closing) {
@@ -51,8 +52,12 @@ fun main() = application {
     ) {
         App(
             store = store,
-            pairing = state.copy(busy = state.busy || closing),
-            onRefreshTicket = { scope.launch { pairing.refreshTicket() } },
+            mesh = state.copy(busy = state.busy || closing),
+            onCreateGroup = { name -> scope.launch { mesh.createGroup(name) } },
+            onClearMessages = mesh::clearMessages,
+            actions = actionState,
+            onAddDevice = actions::addDevice,
+            onRefreshTicket = { scope.launch { mesh.refreshTicket() } },
         )
     }
 }

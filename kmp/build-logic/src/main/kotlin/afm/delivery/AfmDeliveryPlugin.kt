@@ -54,7 +54,7 @@ class AfmDeliveryPlugin : Plugin<Project> {
         }
 
         val host = command("afmHostNative", spirit.resolve("rust")) {
-            listOf("cargo", "build", "--locked", "--release", "-p", "spirit-ffi", "-p", "spirit-cli", "--features", "uniffi/cli")
+            listOf("cargo", "build", "--locked", "--release", "-p", "spirit-ffi", "-p", "spirit-cli", "--features", "spirit-ffi/bindgen")
         }
         val bindings = command("afmGenerateBindings", spirit.resolve("rust")) {
             val library = if (System.getProperty("os.name").startsWith("Mac")) "libspirit_ffi.dylib" else "libspirit_ffi.so"
