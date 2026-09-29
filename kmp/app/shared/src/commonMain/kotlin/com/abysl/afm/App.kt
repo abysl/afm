@@ -35,6 +35,7 @@ fun App(
     onClearMessages: () -> Unit = {},
     actions: GroupActionState = GroupActionState(),
     onAddDevice: (String, String) -> Unit = { _, _ -> },
+    onLeaveGroup: (String) -> Unit = {},
     groupBackHandler: (@Composable (() -> Unit) -> Unit)? = null,
     scanDeviceButton: (@Composable (String) -> Unit)? = null,
 ) {
@@ -58,18 +59,20 @@ fun App(
                         onClearMessages = onClearMessages,
                         onOpenGroup = { selectedGroupId = it },
                         lastTicket = actions.lastTicket,
+                        departure = actions.departure,
                     )
                 } else {
                     groupBackHandler?.invoke { selectedGroupId = null }
                     GroupScreen(group, state.nodeId, !state.loading && !state.busy && state.nodeId.isNotEmpty(),
-                        actions.adding, addedTicket = actions.addedTicket, onBack = { selectedGroupId = null }, onAddDevice = onAddDevice,
+                        actions.adding, actions.leaving, addedTicket = actions.addedTicket, onBack = { selectedGroupId = null }, onAddDevice = onAddDevice,
+                        onLeave = { onLeaveGroup(group.id) },
                         scanDeviceButton = scanDeviceButton,
                     )
                     failureMessage(state.failure, state.error, actions.lastTicket == state.invitation?.ticket && actions.lastTicket != null)?.let { error ->
                         Text(error, color = MaterialTheme.colorScheme.error)
                         Button(onClick = onClearMessages) { Text("Dismiss error") }
                     }
-                    state.notice?.let { notice ->
+                    state.notice?.takeUnless { actions.departure != null && it.startsWith("Left ") }?.let { notice ->
                         Text(notice)
                         Button(onClick = onClearMessages) { Text("Dismiss notice") }
                     }

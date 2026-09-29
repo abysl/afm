@@ -3,7 +3,8 @@
 AFM is a Compose Multiplatform file manager backed by Spirit2. The active app is
 `kmp/`; `bevy/` and `godot/` are independent feature-flow prototypes. The current
 app demonstrates native content-addressed storage and
-[groups and device invitations](kmp/app/README.md#groups-and-device-invitations) on Android and desktop.
+[groups and device invitations](kmp/app/README.md#groups-and-device-invitations)
+on Android and desktop.
 The first cross-device file-manager UX and real file transfer remain on the
 [project roadmap](plans/first-file-transfer/plan.md).
 

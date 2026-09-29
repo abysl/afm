@@ -10,22 +10,22 @@ import kotlin.test.assertEquals
 
 class MeshOwnerLifetimeDesktopTest {
     @Test
-    fun keepsStoreOpenAfterPairingNodeOpenFailureAndClosesItOnOwnerTeardown() = runBlocking {
-        val pairingNodeOpenFailed = CompletableDeferred<Unit>()
-        val pairing = MeshSession({ error("Node directory is unavailable") })
+    fun keepsStoreOpenAfterNodeOpenFailureAndClosesItOnOwnerTeardown() = runBlocking {
+        val nodeOpenFailed = CompletableDeferred<Unit>()
+        val mesh = MeshSession({ error("Node directory is unavailable") })
         val store = CloseTrackingBlobStore()
         val owner = launch {
             runMeshUntilOwnerCancellation(
                 runMesh = {
-                    pairing.run()
-                    pairingNodeOpenFailed.complete(Unit)
+                    mesh.run()
+                    nodeOpenFailed.complete(Unit)
                 },
                 onOwnerTeardown = { store.close() },
             )
         }
 
-        pairingNodeOpenFailed.await()
-        assertEquals("Could not open node", pairing.state.value.error)
+        nodeOpenFailed.await()
+        assertEquals("Could not open node", mesh.state.value.error)
         assertEquals("blob", store.put("blob".encodeToByteArray()))
         assertEquals("blob", store.get("blob").decodeToString())
         assertEquals(0, store.closeCalls)
