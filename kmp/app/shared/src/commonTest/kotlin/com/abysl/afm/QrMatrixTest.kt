@@ -6,7 +6,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class PairingPanelTest {
+class QrMatrixTest {
     @Test
     fun validatesSquareQrMatrix() {
         assertTrue(isValidQrMatrix(2, byteArrayOf(0, 1, 1, 0)))
