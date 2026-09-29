@@ -392,13 +392,12 @@ carries the mesh ID, the mesh name, and the remaining and notified member counts
 gains `--mesh` selection for `mesh add`, `mesh members`, and the `mesh leave`
 command that #9 added.
 
-The single-mesh `PairingSession` in the KMP `mesh` module splits into a
-node-wide session and a per-group session:
-
-- The node-wide session owns node lifecycle, this device's ticket, device
-  presence, and the group list.
-- The per-group session owns the group's members, the add-device action, and
-  leaving.
+The single-mesh `PairingSession` in the KMP `mesh` module is replaced by one
+`MeshSession`. It owns the node lifecycle, this device's ticket, device
+presence, and the group list, and it exposes group-scoped actions: create a
+group, add a device into a chosen group, and leave a group. One session is
+simpler than a node-wide session plus per-group sessions that would share the
+same node, locks, and presence.
 
 ## Catalog model
 
@@ -523,10 +522,10 @@ after that Spirit2 PR merges.
 | S1 | spirit2 | [#10](https://github.com/abysl/spirit-library2/pull/10)–[#13](https://github.com/abysl/spirit-library2/pull/13), four stacked PRs that split [#9](https://github.com/abysl/spirit-library2/pull/9) with an identical final tree: cooperative leave and rejoin for the single mesh, with review fixes including a per-mesh `departed` map | — |
 | D1 | afm | This implementation plan and the spec alignment with #9 | — |
 | S2 | spirit2 | [#14](https://github.com/abysl/spirit-library2/pull/14)–[#22](https://github.com/abysl/spirit-library2/pull/22), nine stacked PRs. **Multi-group node core (Rust):** `meshes` map beside #9's `departed` map, migration from the single-mesh state, per-mesh routing on `pair/2`, `mesh/2` and `depart/1`, the heartbeat across all groups, limits (64 groups, 256 admissions per mesh), and isolation tests. The CLI stays usable with several meshes: `status` and `mesh members` list every mesh, and `mesh add` and `mesh leave` take `--mesh`. The FFI stays single-mesh with a clear error, because AFM pins only S3 | S1 |
-| S3 | spirit2 | **Bindings and sessions:** the multi-mesh FFI, the `MeshNode` contract, splitting `PairingSession` into node-wide and per-group sessions, and the binding sections of Spirit's `wiki/design/nodes.md` and `kmp/README.md` (S2 already rewrote the node design) | S2 |
-| A1 | afm | **Groups home:** pin S3; groups list, New group, Join a group (this device's QR), and showing an existing mesh as a group | S3 |
-| A2 | afm | **Members:** member presence, Add device into the selected group (Android scanner), and Paste code on desktop | A1 |
-| A3 | afm | **Leave group:** menu action and confirmation on every platform, replacing [AFM #13](https://github.com/abysl/afm/pull/13)'s single-mesh leave | A2 |
+| S3 | spirit2 | **Bindings and session:** the multi-mesh FFI, the `MeshNode` contract, one `MeshSession` with group-scoped actions, and the binding sections of Spirit's `wiki/design/nodes.md` and `kmp/README.md` (S2 already rewrote the node design) | S2 |
+
+The remaining Spirit2 and AFM work is planned in the
+[groups and file-sharing MVP](#groups-and-file-sharing-mvp).
 
 For each PR:
 
@@ -539,16 +538,63 @@ For each PR:
 Each PR's description records which checks ran and what remains unverified,
 such as physical devices, real relays, and mixed-version meshes.
 
+### Groups and file-sharing MVP
+
+The maintainer asked for a stripped-down MVP of groups and file sharing ahead
+of the roadmap's stage gates. It keeps this design's isolation, catalog and
+authorization rules, and leaves out everything a first shared drive can do
+without.
+
+**In scope:**
+
+- **Groups:** list, create, show this device's QR, add a device into a chosen
+  group (scan on Android, paste everywhere), members with presence, and leave.
+- **Files:** a flat list per group. Any member can add a file through the system
+  picker and remove any entry. Members download a file, then open or save it.
+- **Catalog:** signed `Add` and `Remove` operations per group, synced by version
+  vectors over the app channel and relayed transitively, as in
+  [Catalog model](#catalog-model).
+- **Transfer:** whole-file, streaming, BLAKE3-verified and atomic, with progress
+  and cancel. The provider is the entry's author if it is online, then any
+  other online member.
+
+**Left out:** folders, rename and move, retention levels, eviction, capacity
+warnings, resumable transfers, per-group identities, member removal, and
+platforms other than Android and Linux desktop.
+
+**Simplifications:**
+
+- **One session.** A single `MeshSession` with group-scoped actions replaces
+  the node-wide and per-group session split.
+- **Share sets live in memory.** AFM sets each group's share set from its
+  catalog at startup and on every change, so nothing about sharing is
+  persisted in Spirit.
+- **One blob store.** The running node owns the device's blob store, and one
+  process owns both.
+- **Android files.** Android content URIs stream through `import_reader` and
+  are exported through the system save dialog. No filesystem path is assumed.
+
+| # | Repo | PR | Depends on |
+|---|---|---|---|
+| S3 | spirit2 | Multi-mesh FFI and Kotlin contract, `MeshSession`, demo | #22 |
+| S4 | spirit2 | Streaming, verified, atomic blob store: import from path or reader, export, verified writes | #22 |
+| S5 | spirit2 | Node-owned store, in-memory share sets, and `spirit/blob/1` mesh-scoped fetch with progress and cancel | S4 |
+| S6 | spirit2 | `spirit/app/1` mesh-scoped app channel and app signatures | #22 |
+| S7 | spirit2 | FFI and Kotlin bindings for S4–S6 | S3, S5, S6 |
+| A1 | afm | Pin Spirit; groups home, create, QR, add device, members, leave | S3 |
+| A2 | afm | Catalog: operations, persistence, sync over the app channel, share-set reconciliation | S7, A1 |
+| A3 | afm | Files UI: list, add, remove, download, open and save, transfer states | A2 |
+
+The same worker, reviewer and 800-line rules apply to every PR above.
+
 ### Later milestones
 
-These follow A3. They depend on the roadmap's stage 1 gate and on SPIRIT-05
-transfer work, and they are planned into PRs once A3 lands:
+These follow the MVP. They depend on the roadmap's stage 1 gate and are planned
+into PRs once the MVP lands:
 
-1. **Catalog UX against a fake backend:** roadmap stage 2 with per-group file
-   trees.
-2. **Spirit2 app requests, application signatures, share sets, and
-   mesh-scoped fetch:** roadmap stages 3a and 3b.
-3. **Real catalog sync and group-scoped downloads:** roadmap stage 3c.
+1. Folders, rename and move in the catalog.
+2. Retention levels, eviction and capacity.
+3. Resumable and multi-source transfers.
 
 ## Acceptance checks
 
