@@ -27,10 +27,11 @@ class MainActivity : ComponentActivity() {
                 onClearMessages = model::clearMessages,
                 actions = actions,
                 onAddDevice = model::addDevice,
+                onLeaveGroup = model::leaveGroup,
                 groupBackHandler = { onBack -> BackHandler(onBack = onBack) },
                 scanDeviceButton = { id ->
                     AndroidPairDeviceButton(
-                        enabled = !mesh.loading && !mesh.busy && mesh.nodeId.isNotEmpty() && !actions.adding && pendingScan == null,
+                        enabled = !mesh.loading && !mesh.busy && mesh.nodeId.isNotEmpty() && !actions.adding && !actions.leaving && pendingScan == null,
                         onClick = { requestScan(id) },
                     )
                 },

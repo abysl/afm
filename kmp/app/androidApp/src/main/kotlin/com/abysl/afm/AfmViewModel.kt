@@ -26,7 +26,7 @@ class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle)
     val actions = GroupActions(mesh, viewModelScope)
     val scanner = PairingScannerModel(
         savedState = savedStateHandle,
-        canStart = { mesh.state.value.let { !it.loading && !it.busy && it.nodeId.isNotEmpty() } && !actions.state.value.adding },
+        canStart = { mesh.state.value.let { !it.loading && !it.busy && it.nodeId.isNotEmpty() } && !actions.state.value.adding && !actions.state.value.leaving },
         onTicket = actions::addScannedTicket,
         onError = mesh::reportError,
     )
@@ -46,9 +46,11 @@ class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle)
         viewModelScope.launch { mesh.createGroup(name) }
     }
 
-    fun clearMessages() = mesh.clearMessages()
+    fun clearMessages() = actions.clearMessages()
 
     fun addDevice(meshId: String, ticket: String) = actions.addDevice(meshId, ticket)
+
+    fun leaveGroup(meshId: String) = actions.leaveGroup(meshId)
 
     fun refreshTicket() {
         viewModelScope.launch { mesh.refreshTicket() }

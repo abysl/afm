@@ -53,10 +53,20 @@ devenv shell -- release-desktop
    Peers need compatible Spirit versions. Closing AFM eventually makes a
    device appear offline. Any member can add a device; there are no roles,
    owners or admin permissions.
+
+6. Open a group's menu and select **Leave group**. Confirm after reading that files
+   held only here become unavailable and unsynced changes are lost. If this
+   device is the last member, leaving deletes the group. AFM reports how many
+   other members were notified. Unreached members learn through a notified
+   member or on next contact with this device while it keeps a departed copy.
+   Leaving does not erase files other members already downloaded.
+
 Adding a device lets it see the group's members, and eventually all files in
 that group, including files added later. Showing your QR lets its holder add
 **you** to one group of their choosing. Being in two groups reveals the same
-device identity to members of both. Do not show your QR to untrusted devices.
+device identity to members of both. Leaving a group is not revocation: already
+downloaded copies stay on other devices, and readmission may expose this device
+to that group again. Do not show your QR to untrusted devices.
 
 Android keeps one `MeshSession` in its Activity ViewModel across rotation and
 scanning, using `noBackupFilesDir/afm-node` for identity and membership. Desktop
@@ -68,6 +78,8 @@ nor this store implements file transfer yet; the group Files section is a
 placeholder for A2/A3. The Android scanner model uses `SavedStateHandle` to keep the target group through Activity recreation and never retains an Activity, Context, or launcher.
 Its permission and camera steps wait for the existing result after restoration.
 There is no Android foreground service. In-flight actions finish before the
-node shuts down; cancelling a screen does not undo an enrollment.
+node shuts down; cancelling a screen does not undo an enrollment. A leave
+confirmed while the app closes may not start. The group remains visible so
+you can retry after reopening.
 
 See the [implementation plan](../../plans/multimesh-groups/plan.md) for outstanding physical camera and cross-network checks.

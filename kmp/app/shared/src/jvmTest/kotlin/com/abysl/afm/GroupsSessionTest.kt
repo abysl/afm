@@ -155,6 +155,31 @@ class GroupsSessionTest {
         sessionJob.cancelAndJoin()
     }
 
+    @Test
+    fun confirmedLeaveSurvivesScreenRecreationWhileWaiting() = runBlocking {
+        val node = FakeGroupsNode().apply {
+            meshes += MeshStatus("mesh1", "Family", listOf(MeshMember("self", "My device", 0)))
+            leaveGate = CompletableDeferred()
+        }
+        val mesh = MeshSession({ node })
+        val sessionJob = launch { mesh.run() }
+        waitUntil { !mesh.state.value.loading }
+        val actions = GroupActions(mesh, this)
+        actions.leaveGroup("mesh1")
+        waitUntil { actions.state.value.leaving }
+        actions.leaveGroup("mesh1")
+        assertEquals("Another action is in progress. Try again when it finishes.", mesh.state.value.error)
+        val recreatedScreenState = actions.state
+        assertNull(recreatedScreenState.value.departure)
+        node.leaveGate?.complete(Unit)
+        waitUntil { recreatedScreenState.value.departure != null }
+        assertEquals(LeftMesh("mesh1", "Family", 2, 1), recreatedScreenState.value.departure)
+        assertEquals("mesh1", node.left)
+        actions.clearMessages()
+        assertNull(actions.state.value.departure)
+        sessionJob.cancelAndJoin()
+    }
+
     private suspend fun waitUntil(condition: () -> Boolean) {
         repeat(100) {
             if (condition()) return

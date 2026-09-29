@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import blue.rae.spirit.sdk.MeshFailure
+import blue.rae.spirit.sdk.LeftMesh
 import blue.rae.spirit.sdk.MeshState
 
 internal fun failureMessage(failure: MeshFailure?, fallback: String?, ownTicket: Boolean = false): String? = when (failure) {
@@ -45,6 +46,7 @@ fun GroupsPanel(
     onClearMessages: () -> Unit,
     onOpenGroup: (String) -> Unit,
     lastTicket: String? = null,
+    departure: LeftMesh? = null,
 ) {
     var creating by rememberSaveable { mutableStateOf(false) }
     var joining by rememberSaveable { mutableStateOf(false) }
@@ -53,9 +55,15 @@ fun GroupsPanel(
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Groups", style = MaterialTheme.typography.headlineMedium)
         if (state.loading) Text("Opening this device…")
-        val notice = state.notice?.split("; ")?.filterNot { state.joinedGroupIds.isNotEmpty() && it.startsWith("Joined ") }?.joinToString("; ")?.ifEmpty { null }
+        departure?.let { Text(departureMessage(it)) }
+        val withoutDeparture = when {
+            departure == null -> state.notice
+            state.notice?.startsWith("Left ${departure.meshName}") == true -> null
+            else -> state.notice?.substringBefore("; Left ${departure.meshName}")
+        }
+        val notice = withoutDeparture?.split("; ")?.filterNot { state.joinedGroupIds.isNotEmpty() && it.startsWith("Joined ") }?.joinToString("; ")?.ifEmpty { null }
         notice?.let { Text(it) }
-        if (state.notice != null) {
+        if (departure != null || state.notice != null) {
             TextButton(onClick = onClearMessages) { Text("Dismiss notice") }
         }
         state.joinedGroupIds.forEach { id ->

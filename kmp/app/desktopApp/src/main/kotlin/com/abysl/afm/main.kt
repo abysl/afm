@@ -54,9 +54,10 @@ fun main() = application {
             store = store,
             mesh = state.copy(busy = state.busy || closing),
             onCreateGroup = { name -> scope.launch { mesh.createGroup(name) } },
-            onClearMessages = mesh::clearMessages,
+            onClearMessages = actions::clearMessages,
             actions = actionState,
             onAddDevice = actions::addDevice,
+            onLeaveGroup = actions::leaveGroup,
             onRefreshTicket = { scope.launch { mesh.refreshTicket() } },
         )
     }

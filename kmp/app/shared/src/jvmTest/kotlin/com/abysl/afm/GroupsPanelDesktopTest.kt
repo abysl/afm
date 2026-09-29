@@ -18,6 +18,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import blue.rae.spirit.sdk.PairingInvitation
 import blue.rae.spirit.sdk.MeshFailure
+import blue.rae.spirit.sdk.LeftMesh
 import blue.rae.spirit.sdk.MeshState
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
@@ -80,4 +81,13 @@ class GroupsPanelDesktopTest {
         onNodeWithText("Create group").performClick()
         runOnIdle { assertEquals("Family", created) }
     }
+    @Test
+    fun departureHidesSdkWordingButRetainsUnrelatedNotice() = runComposeUiTest {
+        val state = MeshState(loading = false, nodeId = "self", notice = "Added Phone; Left Family. Notified 1 of 2 devices; notified devices relay the departure")
+        setContent { MaterialTheme { GroupsPanel(state, {}, {}, {}, {}, departure = blue.rae.spirit.sdk.LeftMesh("family", "Family", 2, 1)) } }
+        onNodeWithText("Added Phone").assertIsDisplayed()
+        onNodeWithText("Left Family. Notified 1 of 2 members. Others learn of your departure from a notified member or when they next reach this device while it keeps the departed copy.").assertIsDisplayed()
+        onNodeWithText("Left Family. Notified 1 of 2 devices; notified devices relay the departure").assertDoesNotExist()
+    }
+
 }
