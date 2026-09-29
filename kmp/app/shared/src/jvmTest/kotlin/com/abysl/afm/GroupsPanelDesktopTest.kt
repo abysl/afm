@@ -14,9 +14,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runComposeUiTest
-import blue.rae.spirit.sdk.DeviceStatus
 import blue.rae.spirit.sdk.PairingInvitation
-import blue.rae.spirit.sdk.PairingState
+import blue.rae.spirit.sdk.MeshState
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.EncodeHintType
@@ -28,7 +27,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 @OptIn(ExperimentalTestApi::class)
-class PairingPanelDesktopTest {
+class GroupsPanelDesktopTest {
     @Test
     fun explainsWhenWindowIsTooNarrowForQr() = runComposeUiTest {
         setContent {
@@ -36,8 +35,8 @@ class PairingPanelDesktopTest {
                 ExactQrMatrix(PairingInvitation("spirit1test", 177, ByteArray(177 * 177), 300))
             }
         }
-        onNodeWithContentDescription("Pairing QR code").assertDoesNotExist()
-        onNodeWithText("Enlarge this window to display the pairing QR code.").assertExists()
+        onNodeWithContentDescription("Join QR code").assertDoesNotExist()
+        onNodeWithText("Enlarge this window to display the join QR code.").assertExists()
     }
 
     @Test
@@ -52,9 +51,10 @@ class PairingPanelDesktopTest {
             },
             300,
         )
-        val state = mutableStateOf(PairingState(loading = false, invitation = invitation, invitationSecondsRemaining = 299))
-        setContent { MaterialTheme { PairingPanel(state.value, {}) } }
-        val image = onNodeWithContentDescription("Pairing QR code").captureToImage().toPixelMap()
+        val state = mutableStateOf(MeshState(loading = false, nodeId = "self", invitation = invitation, invitationSecondsRemaining = 299))
+        setContent { MaterialTheme { GroupsPanel(state.value, {}, {}, {}, {}) } }
+        onNodeWithText("Join a group").performClick()
+        val image = onNodeWithContentDescription("Join QR code").captureToImage().toPixelMap()
         val pixels = IntArray(image.width * image.height) { index ->
             val color = image[index % image.width, index / image.width]
             if (color.red < 0.5f) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
@@ -62,30 +62,8 @@ class PairingPanelDesktopTest {
         val source = RGBLuminanceSource(image.width, image.height, pixels)
         assertEquals(ticket, QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source))).text)
         runOnIdle { state.value = state.value.copy(invitationSecondsRemaining = 0) }
-        onNodeWithContentDescription("Pairing QR code").assertDoesNotExist()
-        onNodeWithText("Pairing QR expired. Refresh it before pairing a device.").assertIsDisplayed()
+        onNodeWithContentDescription("Join QR code").assertDoesNotExist()
+        onNodeWithText("Join QR expired. Refresh it before joining a group.").assertIsDisplayed()
     }
 
-    @Test
-    fun showsPeerIdentityAndTextStatusWithoutDesktopCameraButton() = runComposeUiTest {
-        var refreshes = 0
-        setContent {
-            MaterialTheme {
-                PairingPanel(
-                    PairingState(
-                        loading = false,
-                        peers = listOf(DeviceStatus("node-a", "Desktop", true), DeviceStatus("node-c", "Phone", false)),
-                    ),
-                    onRefreshTicket = { refreshes++ },
-                )
-            }
-        }
-        onNodeWithText("node-a").assertIsDisplayed()
-        onNodeWithText("node-c").assertIsDisplayed()
-        onNodeWithText("Online").assertIsDisplayed()
-        onNodeWithText("Offline").assertIsDisplayed()
-        onNodeWithText("Pair device").assertDoesNotExist()
-        onNodeWithText("Refresh QR").performClick()
-        runOnIdle { assertEquals(1, refreshes) }
-    }
 }

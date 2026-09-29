@@ -30,7 +30,7 @@ internal fun ExactQrMatrix(invitation: PairingInvitation) {
         contentAlignment = Alignment.Center,
     ) {
         if (with(LocalDensity.current) { maxWidth.toPx() } < totalWidth) {
-            Text("Enlarge this window to display the pairing QR code.")
+            Text("Enlarge this window to display the join QR code.")
             return@BoxWithConstraints
         }
         Canvas(
@@ -38,7 +38,7 @@ internal fun ExactQrMatrix(invitation: PairingInvitation) {
                 .widthIn(max = 320.dp)
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .semantics { contentDescription = "Pairing QR code" },
+                .semantics { contentDescription = "Join QR code" },
         ) {
             val modulePixels = floor(min(size.width, size.height) / totalWidth).toInt()
             if (modulePixels == 0) return@Canvas

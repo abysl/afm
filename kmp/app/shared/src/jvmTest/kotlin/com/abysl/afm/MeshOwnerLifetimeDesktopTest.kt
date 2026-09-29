@@ -1,6 +1,6 @@
 package com.abysl.afm
 
-import blue.rae.spirit.sdk.PairingSession
+import blue.rae.spirit.sdk.MeshSession
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
@@ -8,15 +8,15 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class PairingOwnerLifetimeDesktopTest {
+class MeshOwnerLifetimeDesktopTest {
     @Test
     fun keepsStoreOpenAfterPairingNodeOpenFailureAndClosesItOnOwnerTeardown() = runBlocking {
         val pairingNodeOpenFailed = CompletableDeferred<Unit>()
-        val pairing = PairingSession({ error("Node directory is unavailable") }, "AFM mesh")
+        val pairing = MeshSession({ error("Node directory is unavailable") })
         val store = CloseTrackingBlobStore()
         val owner = launch {
-            runPairingUntilOwnerCancellation(
-                runPairing = {
+            runMeshUntilOwnerCancellation(
+                runMesh = {
                     pairing.run()
                     pairingNodeOpenFailed.complete(Unit)
                 },

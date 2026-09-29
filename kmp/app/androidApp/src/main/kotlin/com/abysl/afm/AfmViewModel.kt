@@ -6,7 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import blue.rae.spirit.sdk.AndroidNodeContext
-import blue.rae.spirit.sdk.PairingSession
+import blue.rae.spirit.sdk.MeshSession
 import blue.rae.spirit.sdk.SpiritNode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -14,7 +14,7 @@ import kotlinx.coroutines.withContext
 
 class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle) : AndroidViewModel(application) {
     val store = openBlobStore(application.filesDir.resolve("afm").path)
-    val pairing = PairingSession(
+    val mesh = MeshSession(
         nodeFactory = {
             withContext(Dispatchers.IO) { AndroidNodeContext.initialize(application) }
             SpiritNode.open(
@@ -22,19 +22,19 @@ class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle)
                 "Android ${Build.MODEL.filter { it.isLetterOrDigit() || it == ' ' }.take(24)}",
             )
         },
-        meshName = "AFM mesh",
     )
+    val actions = GroupActions(mesh, viewModelScope)
     val scanner = PairingScannerModel(
         savedState = savedStateHandle,
-        canStart = { pairing.state.value.let { !it.loading && !it.busy } },
-        onTicket = ::pair,
-        onError = pairing::reportError,
+        canStart = { mesh.state.value.let { !it.loading && !it.busy && it.nodeId.isNotEmpty() } && !actions.state.value.adding },
+        onTicket = actions::addScannedTicket,
+        onError = mesh::reportError,
     )
 
     init {
         viewModelScope.launch {
-            runPairingUntilOwnerCancellation(
-                pairing::run,
+            runMeshUntilOwnerCancellation(
+                mesh::run,
                 onOwnerTeardown = {
                     withContext(Dispatchers.IO) { store?.close() }
                 },
@@ -42,11 +42,15 @@ class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle)
         }
     }
 
-    fun pair(ticket: String) {
-        viewModelScope.launch { pairing.pair(ticket) }
+    fun createGroup(name: String) {
+        viewModelScope.launch { mesh.createGroup(name) }
     }
 
+    fun clearMessages() = mesh.clearMessages()
+
+    fun addDevice(meshId: String, ticket: String) = actions.addDevice(meshId, ticket)
+
     fun refreshTicket() {
-        viewModelScope.launch { pairing.refreshTicket() }
+        viewModelScope.launch { mesh.refreshTicket() }
     }
 }

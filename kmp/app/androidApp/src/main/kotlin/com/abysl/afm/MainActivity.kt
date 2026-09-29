@@ -3,40 +3,38 @@ package com.abysl.afm
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.ViewModelProvider
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-
         val model = ViewModelProvider(this)[AfmViewModel::class.java]
         setContent {
-            val pairing by model.pairing.state.collectAsState()
+            val mesh by model.mesh.state.collectAsState()
             val pendingScan by model.scanner.pendingStep.collectAsState()
+            val actions by model.actions.state.collectAsState()
             val requestScan = rememberPairingScannerLauncher(model.scanner)
             App(
                 store = model.store,
-                pairing = pairing,
+                mesh = mesh,
+                onCreateGroup = model::createGroup,
                 onRefreshTicket = model::refreshTicket,
-                pairDeviceButton = {
+                onClearMessages = model::clearMessages,
+                actions = actions,
+                onAddDevice = model::addDevice,
+                groupBackHandler = { onBack -> BackHandler(onBack = onBack) },
+                scanDeviceButton = { id ->
                     AndroidPairDeviceButton(
-                        enabled = !pairing.loading && !pairing.busy && pendingScan == null,
-                        onClick = requestScan,
+                        enabled = !mesh.loading && !mesh.busy && mesh.nodeId.isNotEmpty() && !actions.adding && pendingScan == null,
+                        onClick = { requestScan(id) },
                     )
                 },
             )
         }
     }
-}
-
-@Preview
-@Composable
-fun AppAndroidPreview() {
-    App()
 }
