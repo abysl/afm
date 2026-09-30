@@ -207,6 +207,45 @@ class CatalogStoreTest {
     }
 
     @Test
+    fun successfulStoreWritesClearOnlyTheirMatchingStorageError(): Unit = runBlocking {
+        val directory = Files.createTempDirectory("catalog-recovered-").toFile()
+        try {
+            val author = "a".repeat(64)
+            val files = FakeMeshFiles(author).also { it.admit(mesh, author, 0) }
+            var failCounter = true
+            val store = CatalogStore(directory, mesh, writeCounter = { file, seq ->
+                if (failCounter) throw java.io.IOException("counter failed")
+                file.writeText(seq.toString())
+            })
+            store.own(author, 0, CatalogBody.Add(id, "first", hash, 1), files)
+            assertTrue(store.storageError!!.contains("counter failed"))
+            val second = unsigned(CatalogBody.Add(EntryId.new(), "peer", hash, 1), "b".repeat(64))
+            files.admit(mesh, second.author, 0)
+            store.accept(second.copy(signature = FakeMeshFiles(second.author).signApp(CatalogCodec.domain, CatalogCodec.signed(second))), files)
+            assertTrue(store.storageError!!.contains("counter failed"))
+            failCounter = false
+            store.own(author, 0, CatalogBody.Add(EntryId.new(), "third", hash, 1), files)
+            assertEquals(null, store.storageError)
+            val log = directory.resolve("ops.log")
+            RandomAccessFile(log, "rw").use { it.seek(log.length()); it.write(ByteArray(7)) }
+            val recovered = CatalogStore(directory, mesh)
+            assertTrue(recovered.storageError!!.contains("damaged catalog tail"))
+            recovered.own(author, 0, CatalogBody.Add(EntryId.new(), "fourth", hash, 1), files)
+            assertEquals(null, recovered.storageError)
+        } finally { directory.deleteRecursively() }
+    }
+
+    @Test
+    fun cleansInterruptedTemporaryFilesAtOpen() {
+        val directory = Files.createTempDirectory("catalog-tmp-").toFile()
+        try {
+            listOf("seq-abandoned.tmp", "ops-abandoned.tmp", "obtained-abandoned.tmp").forEach { directory.resolve(it).writeText("partial") }
+            CatalogStore(directory, mesh)
+            assertTrue(directory.listFiles()!!.isEmpty())
+        } finally { directory.deleteRecursively() }
+    }
+
+    @Test
     fun rejectsUnsafeNamesAndAuthorAndMeshAliases() {
         assertEquals(FileNameProblem.InvalidUnicode, validateFileName("a\uD800"))
         listOf(".", "..", "x/y", "x\\y", "x\u202e", "x\u0000", "x\u2028", "x\u2029", "x\uDB40\uDC01", "x\uDB40\uDC20").forEach { assertEquals(FileNameProblem.InvalidCharacter, validateFileName(it)) }
