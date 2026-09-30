@@ -42,7 +42,8 @@ proof per key; with a record up to roughly 750 bytes (255-byte name, legacy
 64-byte mesh ID and 256-byte signature), the operation log is under 400 MiB per
 group. An atomic rewrite temporarily needs another full-size log; corruption
 backups also consume disk until removed. Small sequence counters and decoded
-operations and entry objects can require several hundred MiB of memory worst-case. These are per-group
+operations and entry objects can require several hundred MiB of memory worst-case,
+exceeding typical Android app heaps. These are per-group
 bounds, not an app-wide disk quota; old logs and corruption backups need manual
 retention policy before larger-scale deployments.
 
@@ -54,7 +55,53 @@ local sequence counters, and requests resync. An interrupted append truncates to
 the committed offset. Directory metadata is fsynced after creating a log or
 replacing a counter. Leaving deletes only that group's catalog, not its blobs.
 
+## Synchronization and shares
+
+`afm/catalog/1` frames carry contiguous clocks, a SHA-256 digest of each entire
+clock (ordered winners and one bounded loser proof per key), up to 64 signed ops
+per request or response, a history-page cursor, and a `more` bit; the
+frame is also bounded to 262,144 bytes with a 190,000-byte batch budget. A matching
+clock with a different digest pages signed history from sequence 1, including
+bounded loser proofs; both endpoints thereby observe and report equivocation
+even below the head, and later peers learn the conflict.
+Invalid operations are skipped and
+recorded per op, not allowed to abort an otherwise valid batch. If no accepted op
+and neither vector moves in a round, the exchange stops rather than retrying a
+gap indefinitely. The total exchange deadline is 15 seconds, including waiting
+for the per-pair lock and one of four global transport slots. Presence, local
+pushes, and 60-second anti-entropy trigger exchanges; pending pushes coalesce by
+pair. Request handlers have the caller's remaining deadline, including lock wait.
+
+Each group stores `obtained` alongside `ops.log`. Only an own add or a successful
+`markObtained(meshId, hash)` after a fetch puts a hash in this set. Shares equal
+**obtained(group) ∩ live hashes(group)**, never the device's global blob inventory:
+a blob obtained in group B cannot reveal its existence to group A. Removals
+prune obsolete obtained hashes, and reopen reconciles shares even when loading
+already completed. Failed reconciliation retries with capped exponential backoff.
+Desktop stores catalog state in `~/.spirit2/afm-groups/groups/<meshId>`; the
+native blob store is `~/.spirit2/afm-store`, a sibling of `afm-node`.
+
+The live-entry bound is a deterministic presentation/serving cutoff: signed adds
+remain in the bounded per-clock operation log, but only the lowest 8,192 live
+adds by `(author, generation, seq)` appear and can be shared. Keeping the
+oversized metadata allows the contiguous clock to advance instead of wedging
+sync forever and lets a later remove promote the next identity. Excess entries
+are reported in group catalog errors.
+
+## Limits and follow-ups
+
+A digest mismatch resends an entire clock's history rather than the differing
+suffix, which can multiply bandwidth on large or frequently rewritten clocks.
+There is one in-memory error slot per group, so a later failure can hide an
+unresolved earlier one until it recurs. `acceptBatch` scans all known keys to
+count clocks and contiguous sequences for incoming operations; index these
+clocks if group histories grow. The worst-case decoded catalog and rewrite
+memory can exceed typical Android app heaps; measure and lower limits or stream
+processing before supporting large groups.
+
 A churning peer may occupy an exchange slot until its 15-second deadline; each
-new lower signed winner triggers a full atomic log rewrite. After mid-log
+new lower signed winner triggers a full atomic log rewrite without a rate limit.
+The startup `hasFrameAfter` corruption search scans forward slowly on damaged
+logs; bound or index recovery work if large logs become common. After mid-log
 corruption, own writes are refused until peers resupply the missing operations
 so a sequence counter cannot skip a gap.

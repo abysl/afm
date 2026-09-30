@@ -83,3 +83,20 @@ confirmed while the app closes may not start. The group remains visible so
 you can retry after reopening.
 
 See the [implementation plan](../../plans/multimesh-groups/plan.md) for outstanding physical camera and cross-network checks.
+
+## Catalog API for the files screen
+
+Native Android and desktop owners expose `GroupCatalogs` alongside `MeshSession`.
+`entries(meshId)` is a `StateFlow<List<CatalogEntry>>` with ID, name, BLAKE3 hash,
+size and author. Import bytes using `MeshSession.files.value` first, then call
+`addFile(meshId, name, ImportedBlob)`; call `remove(meshId, entryId)` to stop
+sharing an entry, without deleting local bytes. Fetch/export remains a separate
+UI action. `errors` exposes per-group synchronization failures. The web builds
+remain UI-only and do not instantiate a catalog. The signed format, disk layout
+and app-channel protocol are in [catalog design](../../wiki/design/catalog.md).
+
+The node's native blob store is `afm-store`, a sibling of `afm-node` in Android's
+non-backed-up `noBackupFilesDir` or desktop's `~/.spirit2` directory. These must
+not overlap: Spirit rejects equal or nested node/store directories. The older
+AFM prototype store remains separate. Desktop group catalogs use
+`~/.spirit2/afm-groups/groups/<meshId>`.

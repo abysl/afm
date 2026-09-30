@@ -10,6 +10,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import blue.rae.spirit.sdk.MeshSession
 import blue.rae.spirit.sdk.SpiritNode
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
@@ -20,19 +21,25 @@ fun main() = application {
     val store = remember { openBlobStore("$home/.spirit2/afm") }
     val mesh = remember {
         MeshSession(
-            nodeFactory = { SpiritNode.open("$home/.spirit2/afm-node", "AFM desktop") },
+            nodeFactory = { SpiritNode.open(afmNodeDirectory(File(home, ".spirit2")).path, "AFM desktop", storeDir = afmStoreDirectory(File(home, ".spirit2")).path) },
         )
     }
     val scope = rememberCoroutineScope()
+    val catalogs = remember(mesh) { GroupCatalogs(File(home, ".spirit2/afm-groups"), mesh) }
     val actions = remember(mesh) { GroupActions(mesh, scope) }
     val nodeJob = remember {
         scope.launch {
-            runMeshUntilOwnerCancellation(
-                mesh::run,
-                onOwnerTeardown = {
-                    withContext(Dispatchers.IO) { store?.close() }
-                },
-            )
+            val catalogJob = launch { catalogs.run() }
+            try {
+                runMeshUntilOwnerCancellation(
+                    mesh::run,
+                    onOwnerTeardown = {
+                        withContext(Dispatchers.IO) { store?.close() }
+                    },
+                )
+            } finally {
+                catalogJob.cancelAndJoin()
+            }
         }
     }
     var closing by remember { mutableStateOf(false) }
