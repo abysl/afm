@@ -36,6 +36,7 @@ internal fun failureMessage(failure: MeshFailure?, fallback: String?, ownTicket:
     MeshFailure.NodeClosed -> "AFM's node stopped. Restart AFM."
     MeshFailure.Node -> fallback ?: "Could not contact the device. Try again."
     null -> fallback
+    else -> fallback ?: "The group action failed. Try again."
 }
 
 @Composable
