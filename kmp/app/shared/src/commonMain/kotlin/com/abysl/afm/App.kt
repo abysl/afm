@@ -42,6 +42,9 @@ fun App(
     onPickFile: (String) -> Unit = {},
     onRemoveFile: (String, String) -> Unit = { _, _ -> },
     onClearFileMessage: (String) -> Unit = {},
+    onDownload: (String, String) -> Unit = { _, _ -> },
+    onCancelDownload: (String, String) -> Unit = { _, _ -> },
+    onSaveFile: (String, String) -> Unit = { _, _ -> },
 ) {
     var selectedGroupId by rememberSaveable { mutableStateOf<String?>(null) }
     MaterialTheme {
@@ -73,6 +76,8 @@ fun App(
                         scanDeviceButton = scanDeviceButton,
                         files = files[group.id] ?: FilesState(),
                         onPickFile = onPickFile, onRemoveFile = onRemoveFile, onClearFileMessage = onClearFileMessage,
+                        onDownload = onDownload, onCancelDownload = onCancelDownload,
+                        onSaveFile = onSaveFile,
                     )
                     failureMessage(state.failure, state.error, actions.lastTicket == state.invitation?.ticket && actions.lastTicket != null)?.let { error ->
                         Text(error, color = MaterialTheme.colorScheme.error)

@@ -77,6 +77,22 @@ fun main() = application {
             },
             onRemoveFile = files::remove,
             onClearFileMessage = files::clearMessage,
+            onDownload = files::download,
+            onCancelDownload = files::cancel,
+            onSaveFile = { group, entryId ->
+                val entry = catalogs.entries(group).value.firstOrNull { it.id.rowKey() == entryId }
+                if (entry != null) {
+                    val frame = Frame()
+                    val dialog = FileDialog(frame, "Save file", FileDialog.SAVE).apply { file = entry.name }
+                    try {
+                        dialog.isVisible = true
+                        dialog.file?.let { name ->
+                            val path = File(dialog.directory, name).absolutePath
+                            scope.launch { files.export(group, entryId) { backend, item -> backend.exportFile(item.hash, path) } }
+                        }
+                    } finally { dialog.dispose(); frame.dispose() }
+                }
+            },
             mesh = state.copy(busy = state.busy || closing),
             onCreateGroup = { name -> scope.launch { mesh.createGroup(name) } },
             onClearMessages = actions::clearMessages,

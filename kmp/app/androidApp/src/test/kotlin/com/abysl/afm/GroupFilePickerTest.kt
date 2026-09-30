@@ -7,6 +7,16 @@ import kotlin.test.assertNull
 
 class GroupFilePickerTest {
     @Test
+    fun saveCancellationClearsTheDestinationSelectionAcrossRecreation() {
+        val saved = SavedStateHandle()
+        val picker = GroupFilePicker(saved)
+        picker.selectSave("family", "entry")
+        assertNull(GroupFilePicker(saved).consumeSave(null))
+        assertNull(saved.get<String>("pendingSaveGroup"))
+        assertNull(saved.get<String>("pendingSaveEntry"))
+    }
+
+    @Test
     fun cancellationClearsPendingGroupWithoutStartingAnImport() {
         val saved = SavedStateHandle()
         val picker = GroupFilePicker(saved)
