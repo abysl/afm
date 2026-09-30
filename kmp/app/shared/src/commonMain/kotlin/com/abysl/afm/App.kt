@@ -45,6 +45,8 @@ fun App(
     onDownload: (String, String) -> Unit = { _, _ -> },
     onCancelDownload: (String, String) -> Unit = { _, _ -> },
     onSaveFile: (String, String) -> Unit = { _, _ -> },
+    onOpenFile: (String, String) -> Unit = { _, _ -> },
+    canOpenFiles: Boolean = false,
 ) {
     var selectedGroupId by rememberSaveable { mutableStateOf<String?>(null) }
     MaterialTheme {
@@ -77,7 +79,7 @@ fun App(
                         files = files[group.id] ?: FilesState(),
                         onPickFile = onPickFile, onRemoveFile = onRemoveFile, onClearFileMessage = onClearFileMessage,
                         onDownload = onDownload, onCancelDownload = onCancelDownload,
-                        onSaveFile = onSaveFile,
+                        onSaveFile = onSaveFile, onOpenFile = onOpenFile, canOpenFiles = canOpenFiles,
                     )
                     failureMessage(state.failure, state.error, actions.lastTicket == state.invitation?.ticket && actions.lastTicket != null)?.let { error ->
                         Text(error, color = MaterialTheme.colorScheme.error)

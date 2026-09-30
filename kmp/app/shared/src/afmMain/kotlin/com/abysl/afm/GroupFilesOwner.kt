@@ -40,6 +40,8 @@ private fun catalogMessage(error: CatalogError?): String? = when (error?.kind) {
     null -> null
 }
 
+class FilePresentationException(val userMessage: String) : Exception()
+
 enum class DocumentCleanup { Deleted, Truncated, Failed, Untouched }
 
 sealed interface ExportResult {
@@ -115,15 +117,16 @@ class GroupFilesOwner(
     }
 
     fun addFile(meshId: String, name: String, import: suspend (MeshFiles) -> ImportedBlob) {
-        if (state.value[meshId]?.busy == true) {
-            update(meshId) { it.copy(message = "Another file action is in progress. Wait for it to finish, then try again.") }
-            return
-        }
         catalogs.validateFileName(name)?.let { problem ->
             update(meshId) { it.copy(message = fileNameMessage(problem)) }
             return
         }
-        update(meshId) { it.copy(busy = true, importing = true, message = null) }
+        if (!beginAction(meshId, importing = true)) {
+            if (state.value[meshId]?.busy == true) {
+                update(meshId) { it.copy(message = "Another file action is in progress. Wait for it to finish, then try again.") }
+            }
+            return
+        }
         scope.launch {
             try {
                 val files = checkNotNull(mesh.files.value) { "Node is closed" }
@@ -147,9 +150,8 @@ class GroupFilesOwner(
     }
 
     fun remove(meshId: String, entryId: String) {
-        if (state.value[meshId]?.busy == true) return
         val target = catalogs.entries(meshId).value.firstOrNull { it.id.rowKey() == entryId }?.id ?: return
-        update(meshId) { it.copy(busy = true, message = null) }
+        if (!beginAction(meshId, importing = false)) return
         scope.launch {
             try {
                 when (catalogs.remove(meshId, target)) {
@@ -270,6 +272,8 @@ class GroupFilesOwner(
             ExportResult.Saved
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (failure: FilePresentationException) {
+            failed(failure.userMessage)
         } catch (failure: MeshNodeException) {
             failed(if (failure.failure == MeshFailure.Missing || failure.failure == MeshFailure.Corrupt)
                 "This copy is damaged or missing. Download it again." else fileFailureMessage(failure.failure))
@@ -292,6 +296,16 @@ class GroupFilesOwner(
         if (mesh.state.value.groups.none { it.id == meshId } ||
             catalogs.entries(meshId).value.none { it.id.rowKey() == entryId }) return
         update(meshId) { it.copy(transfers = it.transfers + (entryId to transfer)) }
+    }
+
+    private fun beginAction(meshId: String, importing: Boolean): Boolean {
+        while (true) {
+            val current = mutableState.value
+            val previous = current[meshId] ?: return false
+            if (previous.busy) return false
+            if (mutableState.compareAndSet(current, current + (meshId to
+                    previous.copy(busy = true, importing = importing, message = null)))) return true
+        }
     }
 
     private fun update(meshId: String, change: (FilesState) -> FilesState) {
