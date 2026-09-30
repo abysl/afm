@@ -96,7 +96,6 @@ class CatalogStore(
             val pending = mutableListOf<CatalogOp>()
             val seen = operations.toMutableMap()
             val proofs = loserProofs.toMutableMap()
-            var live = currentLiveCount()
             var replacingWinner = false
             for ((op, valid) in checked) {
                 if (!valid) { rejected += "Untrusted catalog operation"; continue }
@@ -132,14 +131,8 @@ class CatalogStore(
                     rejected += "Catalog sequence outside contiguous bound"
                     continue
                 }
-                if (op.body is CatalogBody.Add && live >= CatalogCodec.MAX_LIVE_ENTRIES) {
-                    rejected += "Catalog live-entry limit"
-                    continue
-                }
                 seen[key] = op
                 pending += op
-                if (op.body is CatalogBody.Add) live++
-                if (op.body is CatalogBody.Remove) live = (live - 1).coerceAtLeast(0)
             }
             if (pending.isNotEmpty()) {
                 if (replacingWinner) rewriteLog(seen.values + proofs.values) else appendFrames(pending)
@@ -159,7 +152,6 @@ class CatalogStore(
         val seq = maxOf(previous, operations.keys.filter { it.first == author && it.second == generation }.maxOfOrNull { it.third } ?: 0L) + 1
         require(seq <= CatalogCodec.MAX_SEQ_PER_CLOCK) { "Catalog sequence limit" }
         require(seq == (operations.keys.count { it.first == author && it.second == generation } + 1).toLong()) { "Resync damaged catalog before writing" }
-        require(body !is CatalogBody.Add || currentLiveCount() < CatalogCodec.MAX_LIVE_ENTRIES) { "Catalog live-entry limit" }
         require(operations.keys.any { it.first == author && it.second == generation } ||
             operations.keys.map { CatalogClock(it.first, it.second) }.distinct().size < CatalogCodec.MAX_CATALOG_CLOCKS) { "Catalog clock limit" }
         val unsigned = CatalogOp(mesh, author, generation, seq, body, "")
@@ -168,7 +160,10 @@ class CatalogStore(
         appendFrames(listOf(op))
         operations[Triple(author, generation, seq)] = op
         rebuild()
-        try { (writeCounter ?: ::atomicCounter)(counter, seq) } catch (failure: Exception) { storageError = "Catalog counter update failed: ${failure.message}" }
+        try {
+            (writeCounter ?: ::atomicCounter)(counter, seq)
+            if (storageError?.startsWith("Catalog counter update failed:") == true) storageError = null
+        } catch (failure: Exception) { storageError = "Catalog counter update failed: ${failure.message}" }
         op
     }
 
@@ -188,6 +183,7 @@ class CatalogStore(
                 pending.forEach { writeFrame(file, CatalogCodec.record(it)) }
                 file.fd.sync()
                 if (created) syncDirectory()
+                if (storageError != null && !storageError!!.startsWith("Catalog counter update failed:")) storageError = null
             } catch (failure: Exception) {
                 file.setLength(end)
                 file.fd.sync()
@@ -206,6 +202,7 @@ class CatalogStore(
             }
             atomicReplaceCatalogFile(temp, log)
             syncDirectory()
+            if (storageError != null && !storageError!!.startsWith("Catalog counter update failed:")) storageError = null
         } finally { temp.delete() }
     }
 
@@ -225,8 +222,6 @@ class CatalogStore(
             CatalogEntry(id, body.name, body.hash, body.size, op.author)
         }
     }
-
-    private fun currentLiveCount() = entries.value.size
 
     private fun compare(a: CatalogOp, b: CatalogOp): Int {
         val left = CatalogCodec.record(a)

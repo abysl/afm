@@ -18,11 +18,13 @@ class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle)
         nodeFactory = {
             withContext(Dispatchers.IO) { AndroidNodeContext.initialize(application) }
             SpiritNode.open(
-                application.noBackupFilesDir.resolve("afm-node").path,
+                afmNodeDirectory(application.noBackupFilesDir).path,
                 "Android ${Build.MODEL.filter { it.isLetterOrDigit() || it == ' ' }.take(24)}",
+                storeDir = afmStoreDirectory(application.noBackupFilesDir).path,
             )
         },
     )
+    val catalogs = GroupCatalogs(application.noBackupFilesDir, mesh)
     val actions = GroupActions(mesh, viewModelScope)
     val scanner = PairingScannerModel(
         savedState = savedStateHandle,
@@ -32,6 +34,7 @@ class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle)
     )
 
     init {
+        viewModelScope.launch { catalogs.run() }
         viewModelScope.launch {
             runMeshUntilOwnerCancellation(
                 mesh::run,

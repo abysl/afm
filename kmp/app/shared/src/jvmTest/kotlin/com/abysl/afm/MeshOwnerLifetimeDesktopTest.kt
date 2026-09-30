@@ -1,6 +1,10 @@
 package com.abysl.afm
 
 import blue.rae.spirit.sdk.MeshSession
+import blue.rae.spirit.sdk.SpiritNode
+import java.nio.file.Files
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
@@ -33,6 +37,21 @@ class MeshOwnerLifetimeDesktopTest {
         owner.cancelAndJoin()
 
         assertEquals(1, store.closeCalls)
+    }
+
+    @Test
+    fun ownerDirectoriesOpenNativeStoreAndAllowShares(): Unit = runBlocking {
+        val root = Files.createTempDirectory("afm-owner-").toFile()
+        try {
+            val node = afmNodeDirectory(root)
+            val store = afmStoreDirectory(root)
+            assertFalse(store.canonicalPath.startsWith(node.canonicalPath + java.io.File.separator))
+            SpiritNode.open(node.path, "AFM desktop", local = true, storeDir = store.path).use { opened ->
+                val mesh = opened.createMesh("Group")
+                opened.setShares(mesh, emptyList())
+                assertTrue(store.isDirectory)
+            }
+        } finally { root.deleteRecursively() }
     }
 
     private class CloseTrackingBlobStore : BlobStore {
