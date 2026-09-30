@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -38,6 +39,29 @@ class GroupScreenDesktopTest {
     ))
 
     @Test
+    fun duplicateNamesAndRemoveRequireConfirmation() = runComposeUiTest {
+        val rows = listOf(FileRow("a", "same.txt", 3, "Laptop", true), FileRow("b", "same.txt", 8, "Phone", false))
+        var removed: String? = null
+        setContent { MaterialTheme { GroupScreen(group, "self", true, false, false, {}, { _, _ -> }, {},
+            files = FilesState(entries = rows), onRemoveFile = { _, id -> removed = id }) } }
+        onNodeWithText("3 B · Added by Laptop · On this device").assertIsDisplayed()
+        onNodeWithText("8 B · Added by Phone · Not on this device").assertIsDisplayed()
+        onAllNodesWithText("Remove same.txt")[0].performClick()
+        onNodeWithText("This removes the group entry, not the file itself. Members who downloaded it keep their copies.").assertIsDisplayed()
+        onNodeWithText("Cancel").performClick()
+        runOnIdle { assertEquals(null, removed) }
+    }
+
+    @Test
+    fun importingAndCatalogFailureHaveDistinctMessages() = runComposeUiTest {
+        setContent { MaterialTheme { GroupScreen(group, "self", true, false, false, {}, { _, _ -> }, {},
+            files = FilesState(busy = true, importing = true, catalogProblem = "Could not save group files.")) } }
+        onNodeWithText("Importing file…").assertExists()
+        onNodeWithText("Could not save group files.").assertExists()
+        onNodeWithText("Dismiss file message").assertExists()
+    }
+
+    @Test
     fun clearsPastedCodeOnlyAfterSuccessfulAdd() = runComposeUiTest {
         val added = androidx.compose.runtime.mutableStateOf<String?>(null)
         setContent { MaterialTheme { GroupScreen(group, "self", true, false, false, {}, { _, _ -> }, {}, addedTicket = added.value) } }
@@ -60,7 +84,7 @@ class GroupScreenDesktopTest {
         onNodeWithText("Laptop (this device)").assertIsDisplayed()
         onNodeWithText("Online").assertIsDisplayed()
         onNodeWithText("Offline").assertIsDisplayed()
-        onNodeWithText("Files coming soon. Group files will be visible to all current and future members.").assertIsDisplayed()
+        onNodeWithText("No files in this group yet.").assertIsDisplayed()
         onNodeWithText("Paste code").performTextInput("spirit1otherdevice")
         onNodeWithText("Scan QR code").assertDoesNotExist()
         onNodeWithText("Add pasted code").performClick()

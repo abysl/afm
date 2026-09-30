@@ -2,6 +2,9 @@ package com.abysl.afm
 
 import android.app.Application
 import android.os.Build
+import android.net.Uri
+import android.provider.OpenableColumns
+import blue.rae.spirit.sdk.importStream
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
@@ -25,6 +28,8 @@ class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle)
         },
     )
     val catalogs = GroupCatalogs(application.noBackupFilesDir, mesh)
+    val files = GroupFilesOwner(catalogs, mesh, viewModelScope)
+    private val picker = GroupFilePicker(savedStateHandle)
     val actions = GroupActions(mesh, viewModelScope)
     val scanner = PairingScannerModel(
         savedState = savedStateHandle,
@@ -54,6 +59,25 @@ class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle)
     fun addDevice(meshId: String, ticket: String) = actions.addDevice(meshId, ticket)
 
     fun leaveGroup(meshId: String) = actions.leaveGroup(meshId)
+
+    fun pickFile(meshId: String) { picker.select(meshId) }
+
+    fun selectedFile(uri: Uri?) {
+        val (group, selected) = picker.consume(uri) ?: return
+        val resolver = getApplication<Application>().contentResolver
+        viewModelScope.launch(Dispatchers.IO) {
+            val name = runCatching {
+                resolver.query(selected, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                }
+            }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Selected file"
+            files.addFile(group, name) { backend ->
+                withContext(Dispatchers.IO) {
+                    backend.importStream { resolver.openInputStream(selected) ?: error("Cannot open selected file") }
+                }
+            }
+        }
+    }
 
     fun refreshTicket() {
         viewModelScope.launch { mesh.refreshTicket() }
