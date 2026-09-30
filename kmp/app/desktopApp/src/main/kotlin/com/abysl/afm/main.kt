@@ -30,6 +30,8 @@ fun main() = application {
     val catalogs = remember(mesh) { GroupCatalogs(File(home, ".spirit2/afm-groups"), mesh) }
     val actions = remember(mesh) { GroupActions(mesh, scope) }
     val files = remember(mesh) { GroupFilesOwner(catalogs, mesh, scope) }
+    val openCopies = remember { DesktopOpenCopies() }
+    val canOpenFiles = remember { desktopOpenAvailable(System.getProperty("os.name")) }
     val nodeJob = remember {
         scope.launch {
             val catalogJob = launch { catalogs.run() }
@@ -55,6 +57,7 @@ fun main() = application {
                 closing = true
                 scope.launch {
                     nodeJob.cancelAndJoin()
+                    openCopies.clear()
                     exitApplication()
                 }
             }
@@ -79,6 +82,14 @@ fun main() = application {
             onClearFileMessage = files::clearMessage,
             onDownload = files::download,
             onCancelDownload = files::cancel,
+            canOpenFiles = canOpenFiles,
+            onOpenFile = { group, entryId ->
+                if (canOpenFiles) scope.launch {
+                    files.export(group, entryId, action = "Open", successMessage = "Opened in another app.") { backend, entry ->
+                        openCopies.open(backend, entry)
+                    }
+                }
+            },
             onSaveFile = { group, entryId ->
                 val entry = catalogs.entries(group).value.firstOrNull { it.id.rowKey() == entryId }
                 if (entry != null) {

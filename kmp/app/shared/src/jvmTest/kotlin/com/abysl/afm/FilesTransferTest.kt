@@ -142,7 +142,35 @@ class FilesTransferTest {
     }
 
     @Test
-    fun providersStayInsideTheSelectedGroup() = runBlocking {
+    fun concurrentAddsReserveBusyBeforeImporting() = runBlocking {
+        fixture(emptySet()) { test ->
+            val start = CompletableDeferred<Unit>()
+            val imports = java.util.concurrent.atomic.AtomicInteger()
+            val first = launch(Dispatchers.Default) {
+                start.await()
+                test.owner.addFile(group, "first.txt") { files ->
+                    imports.incrementAndGet()
+                    files.importFile(test.root.resolve("bytes").path)
+                }
+            }
+            val second = launch(Dispatchers.Default) {
+                start.await()
+                test.owner.addFile(group, "second.txt") { files ->
+                    imports.incrementAndGet()
+                    files.importFile(test.root.resolve("bytes").path)
+                }
+            }
+            start.complete(Unit)
+            first.join()
+            second.join()
+            waitFor { test.owner.state.value[group]?.entries?.size == 2 && test.owner.state.value[group]?.busy == false }
+            assertEquals(1, imports.get())
+        }
+    }
+
+    @Test
+    fun providersStayInsideTheSelectedGroup()
+ = runBlocking {
         fixture(setOf(phone, outsider)) { test ->
             test.node.failures[phone] = MeshFailure.Unavailable
             test.owner.download(group, test.id)

@@ -2,6 +2,12 @@ package com.abysl.afm
 
 import android.app.Application
 import android.os.Build
+import android.content.Intent
+import android.content.ActivityNotFoundException
+import android.webkit.MimeTypeMap
+import androidx.core.content.FileProvider
+import java.io.File
+import java.util.UUID
 import android.net.Uri
 import blue.rae.spirit.sdk.exportToStream
 import android.provider.OpenableColumns
@@ -15,6 +21,10 @@ import blue.rae.spirit.sdk.MeshSession
 import blue.rae.spirit.sdk.SpiritNode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -33,6 +43,8 @@ class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle)
     val catalogs = GroupCatalogs(application.noBackupFilesDir, mesh)
     val files = GroupFilesOwner(catalogs, mesh, viewModelScope)
     private val picker = GroupFilePicker(savedStateHandle)
+    private val openCache = openCacheDirectory(application.cacheDir)
+    private val openCacheLock = Mutex()
     val actions = GroupActions(mesh, viewModelScope)
     val scanner = PairingScannerModel(
         savedState = savedStateHandle,
@@ -42,6 +54,14 @@ class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle)
     )
 
     init {
+        viewModelScope.launch { clearOpenCache() }
+        viewModelScope.launch {
+            var previous = emptySet<String>()
+            mesh.state.map { state -> state.groups.map { it.id }.toSet() }.distinctUntilChanged().collect { current ->
+                if ((previous - current).isNotEmpty()) clearOpenCache()
+                previous = current
+            }
+        }
         viewModelScope.launch { catalogs.run() }
         viewModelScope.launch {
             runMeshUntilOwnerCancellation(
@@ -148,6 +168,54 @@ class AfmViewModel(application: Application, savedStateHandle: SavedStateHandle)
                 { DocumentsContract.deleteDocument(resolver, uri) },
                 { resolver.openOutputStream(uri, "wt")?.use { true } ?: false },
             )
+        }
+    }
+
+    fun openFile(meshId: String, entryId: String) {
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            openCacheLock.withLock {
+                var copy: File? = null
+                var opened = false
+                try {
+                    val result = files.export(meshId, entryId, action = "Open", successMessage = "Opened in another app.") { backend, entry ->
+                        if (!openFileTypeAllowed(entry.name)) throw FilePresentationException(blockedOpenMessage)
+                        val output = withContext(Dispatchers.IO) {
+                            openCacheFile(app.cacheDir, UUID.randomUUID().toString(), entry.name).also { file ->
+                                check(file.parentFile?.mkdirs() == true || file.parentFile?.isDirectory == true)
+                            }
+                        }
+                        copy = output
+                        val uri = withContext(Dispatchers.IO) {
+                            backend.exportFile(entry.hash, output.absolutePath)
+                            FileProvider.getUriForFile(app, fileProviderAuthority(app.packageName), output)
+                        }
+                        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(entry.name.substringAfterLast('.', "").lowercase()) ?: "application/octet-stream"
+                        try {
+                            app.startActivity(Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, mime)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                            })
+                        } catch (failure: ActivityNotFoundException) {
+                            throw FilePresentationException("Open isn't available here; use Save.")
+                        }
+                    }
+                    opened = result == ExportResult.Saved
+                } finally {
+                    if (!opened) withContext(NonCancellable + Dispatchers.IO) {
+                        copy?.delete()
+                        copy?.parentFile?.delete()
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun clearOpenCache() = withContext(Dispatchers.IO) {
+        openCacheLock.withLock {
+            if (openCache.exists() && !openCache.deleteRecursively()) {
+                mesh.reportError("Could not clear temporary Open files. Check app storage and restart AFM.")
+            }
         }
     }
 

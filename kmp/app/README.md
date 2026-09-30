@@ -115,4 +115,25 @@ destination or one opened for writing, AFM first asks the provider to delete an
 incomplete document, then falls back to truncating it if deletion is unsupported.
 If both fail, it warns you to remove the incomplete document yourself. A completed
 verified write is kept even if the screen closes. Desktop Save uses the native
-save dialog and Spirit's atomic verified file export. Open is not available in this increment. The group list is flat, removal is not erasure, and physical devices, real SAF providers, and relays still need separate validation.
+save dialog and Spirit's atomic verified file export. The group list is flat,
+removal is not erasure, and physical devices, real SAF providers, and relays still
+need separate validation.
+
+## Open a local group file
+
+Android **Open** exports a verified copy into a randomly named subdirectory under
+the app's `cache/afm-open` and grants the chosen viewer temporary read access
+through `FileProvider` and `ACTION_VIEW`. The directory contains the entry's
+validated display name, never its content hash. AFM clears these Open copies when
+its ViewModel starts and after a group is left; the system can also evict cache
+files earlier. A viewer may lose access after cleanup, so use **Save** for a
+durable copy. When no viewer is available, use **Save** instead.
+
+Linux desktop **Open** exports to a temporary file and invokes the system default
+application on IO. The previous temporary Open directory is deleted on the next
+Open; the last one is deleted on exit. Open is hidden on Windows and macOS because
+peer-supplied names and extensions can be executable there; **Save** remains
+available. On both Android and Linux, Open refuses files without an extension
+or with an executable or script extension (case-insensitively) and directs you
+to Save instead. A build alone does not verify external viewers or real SAF providers.
+

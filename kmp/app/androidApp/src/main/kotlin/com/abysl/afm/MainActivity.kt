@@ -33,6 +33,8 @@ class MainActivity : ComponentActivity() {
                 onDownload = model.files::download,
                 onCancelDownload = model.files::cancel,
                 onSaveFile = { group, entry -> model.selectSave(group, entry)?.let(savePicker::launch) },
+                onOpenFile = model::openFile,
+                canOpenFiles = true,
                 mesh = mesh,
                 onCreateGroup = model::createGroup,
                 onRefreshTicket = model::refreshTicket,

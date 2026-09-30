@@ -24,6 +24,8 @@ import blue.rae.spirit.sdk.MeshState
 import blue.rae.spirit.sdk.LeftMesh
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -66,6 +68,21 @@ class GroupScreenDesktopTest {
         onNodeWithText("Importing file…").assertExists()
         onNodeWithText("Could not save group files.").assertExists()
         onNodeWithText("Dismiss file message").assertExists()
+    }
+
+    @Test
+    fun desktopOpenIsLinuxOnlyAndOtherPlatformsKeepSave() = runComposeUiTest {
+        assertTrue(desktopOpenAvailable("Linux"))
+        assertFalse(desktopOpenAvailable("Windows 11"))
+        assertFalse(desktopOpenAvailable("Mac OS X"))
+        val enabled = mutableStateOf(false)
+        val rows = FilesState(entries = listOf(FileRow("local", "photo.jpg", 2, "Laptop", true)))
+        setContent { MaterialTheme { GroupScreen(group, "self", true, false, false, {}, { _, _ -> }, {},
+            files = rows, canOpenFiles = enabled.value) } }
+        onNodeWithText("Save photo.jpg").assertExists()
+        onNodeWithText("Open photo.jpg").assertDoesNotExist()
+        runOnIdle { enabled.value = true }
+        onNodeWithText("Open photo.jpg").assertExists()
     }
 
     @Test

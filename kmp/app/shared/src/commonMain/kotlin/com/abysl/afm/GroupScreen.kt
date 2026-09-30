@@ -62,6 +62,8 @@ fun GroupScreen(
     onDownload: (String, String) -> Unit = { _, _ -> },
     onCancelDownload: (String, String) -> Unit = { _, _ -> },
     onSaveFile: (String, String) -> Unit = { _, _ -> },
+    onOpenFile: (String, String) -> Unit = { _, _ -> },
+    canOpenFiles: Boolean = false,
 ) {
     var code by remember(group.id) { mutableStateOf("") }
     LaunchedEffect(group.id, addedTicket) {
@@ -125,6 +127,7 @@ fun GroupScreen(
                     Text("${fileSize(entry.size)} · Added by ${entry.author} · ${if (entry.local) "On this device" else "Not on this device"}")
                     if (entry.local) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (canOpenFiles) TextButton(onClick = { onOpenFile(group.id, entry.id) }) { Text("Open ${entry.name}") }
                             TextButton(onClick = { onSaveFile(group.id, entry.id) }) { Text("Save ${entry.name}") }
                         }
                     } else {
