@@ -150,9 +150,15 @@ the same device. Spirit keeps a local, non-replicated **share set** per mesh:
 - A fetch request names `(mesh, hash)`. It is served only if the requester is a
   member of that mesh, the hash is in that mesh's share set, and a verified local
   copy exists. Every other case returns the same "unavailable" error.
-- AFM keeps each share set equal to the hashes of live file entries in that
-  group's catalog. It reconciles the set at startup and on every catalog change.
-  A member that downloads a file can therefore serve it to other members.
+- AFM keeps each share set equal to the live hashes in that group's catalog
+  that this device added to the group itself or fetched through that group. It
+  reconciles the set at startup and on every catalog change. A member that
+  downloads a file through a group can therefore serve it to that group's other
+  members.
+- A live entry alone never puts a hash in a device's share set. Otherwise a
+  member of group A could add a hash that another device holds only for group B,
+  and that device would start serving it to A. Knowing a hash, or listing it, is
+  not a credential.
 
 Alternatives rejected: letting anyone who shares any mesh fetch any hash leaks
 across groups and allows "do you have this file" probing. A Spirit-to-AFM
@@ -416,8 +422,10 @@ CatalogOp {
 }
 ```
 
-- `EntryId` is 16 random bytes. The tree is every `Add` whose entry has no
-  `Remove`. A `Remove` that arrives before its `Add` is kept.
+- `EntryId` is 16 random bytes. An entry is identified by its author,
+  generation and `EntryId` together, so two authors who pick the same `EntryId`
+  get separate entries on every device. The tree is every `Add` whose entry has
+  no `Remove`. A `Remove` that arrives before its `Add` is kept.
 - Rename, move, and replace are a `Remove` followed by an `Add` for the same
   hash, so no bytes move.
 - Removing a folder removes every entry the remover can see under it. A file
@@ -431,8 +439,12 @@ CatalogOp {
   still verify.
 
   If a second, different operation arrives for an existing
-  `(author, generation, seq)`, the first is kept and the conflict is surfaced as an
-  error.
+  `(author, generation, seq)`, every device keeps the same deterministic winner
+  (the one with the lowest canonical signed bytes). The losing variant still
+  travels during sync, so every device sees the conflict, which is surfaced as
+  an error. An operation is accepted only when its `seq` is exactly one more
+  than the highest contiguous `seq` already held for that author and generation,
+  so a gap can never wedge sync.
 - A device writes its next `seq` durably before publishing an operation. The
   catalog lives in the same non-backup root as the identity, so they are lost
   together. Re-joining starts a new generation at `seq` 1, so deleting the catalog on
@@ -440,7 +452,11 @@ CatalogOp {
 - Entries a departed device added stay in the group. Leaving removes the
   device, not its files.
 - Bounds: 1 KiB per path, 64 segments, the Spirit name rules for each segment,
-  and 256 KiB per exchange batch.
+  and 256 KiB per exchange batch. There is also a maximum `seq` per author and
+  generation, and a maximum number of live entries per group, at or below
+  Spirit's 65,536-hash share limit. Operations beyond a bound are refused the
+  same way on every device. Names also exclude format and bidi-override
+  characters, `\`, `.` and `..`.
 
 Signed authorship adds little work now. It keeps "added by" honest when
 operations are relayed by other members, and any later permission model needs it.
