@@ -8,6 +8,9 @@ import blue.rae.spirit.sdk.MeshSession
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,6 +40,13 @@ private fun catalogMessage(error: CatalogError?): String? = when (error?.kind) {
     null -> null
 }
 
+enum class DocumentCleanup { Deleted, Truncated, Failed, Untouched }
+
+sealed interface ExportResult {
+    data object Saved : ExportResult
+    data class Failed(val message: String) : ExportResult
+}
+
 class GroupFilesOwner(
     private val catalogs: GroupCatalogs,
     private val mesh: MeshSession,
@@ -45,14 +55,28 @@ class GroupFilesOwner(
     private val mutableState = MutableStateFlow<Map<String, FilesState>>(emptyMap())
     val state: StateFlow<Map<String, FilesState>> = mutableState.asStateFlow()
     private val refreshLocks = ConcurrentHashMap<String, Mutex>()
+    private val transfers = mutableMapOf<Pair<String, String>, Job>()
+    private val corruptProviders = mutableMapOf<Pair<String, String>, MutableSet<String>>()
 
     init {
         scope.launch {
             mesh.state.map { it.groups.map { group -> group.id to group.members.map { member -> member.id to member.name } } }
                 .distinctUntilChanged().collectLatest { groups ->
                     val ids = groups.map { it.first }.toSet()
-                    mutableState.update { it.filterKeys { key -> key in ids } }
-                    for (id in ids) launch { catalogs.entries(id).collect { refresh(id) } }
+                    mutableState.update { current -> ids.associateWith { current[it] ?: FilesState() } }
+                    synchronized(transfers) { transfers.filterKeys { it.first !in ids }.values.toList() }.forEach { it.cancel() }
+                    synchronized(corruptProviders) { corruptProviders.keys.removeAll { it.first !in ids } }
+                    for (id in ids) launch {
+                        catalogs.entries(id).collect { entries ->
+                            val live = entries.map { it.id.rowKey() }.toSet()
+                            val removed = synchronized(transfers) {
+                                transfers.filterKeys { it.first == id && it.second !in live }.values.toList()
+                            }
+                            removed.forEach { it.cancel() }
+                            update(id) { it.copy(transfers = it.transfers.filterKeys { key -> key in live }) }
+                            refresh(id)
+                        }
+                    }
                 }
         }
         scope.launch { mesh.files.collect { files -> if (files != null) mutableState.value.keys.forEach { refresh(it) } } }
@@ -112,8 +136,7 @@ class GroupFilesOwner(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: MeshNodeException) {
-                update(meshId) { it.copy(message = if (failure.failure == MeshFailure.NodeClosed)
-                    "AFM's node stopped. Restart AFM." else "Could not import file. Check the selected file and available storage, then retry.") }
+                update(meshId) { it.copy(message = "Import failed: ${fileFailureMessage(failure.failure)}") }
             } catch (failure: Exception) {
                 update(meshId) { it.copy(message = if (mesh.files.value == null)
                     "AFM's node stopped. Restart AFM." else "Could not import file. Check the selected file and available storage, then retry.") }
@@ -147,10 +170,134 @@ class GroupFilesOwner(
     fun clearMessage(meshId: String) {
         catalogs.clearError(meshId)
         catalogs.clearError("*")
-        update(meshId) { it.copy(message = null) }
+        update(meshId) { it.copy(message = null, exportMessage = null) }
+    }
+
+    fun download(meshId: String, entryId: String) {
+        val key = meshId to entryId
+        val previous = synchronized(transfers) { transfers[key] }
+        if (previous?.isActive == true) {
+            val terminal = state.value[meshId]?.transfers?.get(entryId)
+            if (terminal == FileTransfer.Cancelled || terminal == FileTransfer.SourceUnavailable || terminal is FileTransfer.Failed) {
+                scope.launch { previous.join(); download(meshId, entryId) }
+            }
+            return
+        }
+        val entry = catalogs.entries(meshId).value.firstOrNull { it.id.rowKey() == entryId } ?: return
+        updateTransfer(meshId, entryId, FileTransfer.Queued)
+        val job = scope.launch {
+            try {
+                val files = mesh.files.value ?: throw MeshNodeException(MeshFailure.NodeClosed)
+                val group = mesh.state.value.groups.firstOrNull { it.id == meshId }
+                    ?: throw MeshNodeException(MeshFailure.NotMember)
+                val online = group.members.filter { it.online && it.id != mesh.state.value.nodeId }
+                val preferred = online.filter { it.id == entry.author } + online.filter { it.id != entry.author }
+                val excluded = synchronized(corruptProviders) { corruptProviders[key]?.toSet() ?: emptySet() }
+                val clean = preferred.filter { it.id !in excluded }
+                val providers = clean.ifEmpty { preferred }
+                if (providers.isEmpty()) {
+                    updateTransfer(meshId, entryId, FileTransfer.SourceUnavailable)
+                    return@launch
+                }
+                val corruptThisAttempt = mutableSetOf<String>()
+                for ((index, provider) in providers.withIndex()) {
+                    updateTransfer(meshId, entryId, FileTransfer.Queued)
+                    try {
+                        files.fetch(meshId, provider.id, entry.hash, entry.size,
+                            onQueued = { updateTransfer(meshId, entryId, FileTransfer.Queued) },
+                            onProgress = { received, total -> updateTransfer(meshId, entryId,
+                                if (received >= total) FileTransfer.Verifying else FileTransfer.Transferring(received, total)) },
+                        )
+                        withContext(NonCancellable) {
+                            if (catalogs.entries(meshId).value.any { it.hash == entry.hash }) {
+                                catalogs.markObtained(meshId, entry.hash)
+                                if (catalogs.entries(meshId).value.none { it.hash == entry.hash }) {
+                                    val error = catalogs.errors.value[meshId]
+                                    if (error?.kind == CatalogErrorKind.Share && error.reason == "Hash is not live in group") catalogs.clearError(meshId)
+                                }
+                            }
+                            refresh(meshId)
+                            if (catalogs.entries(meshId).value.any { it.id == entry.id }) {
+                                updateTransfer(meshId, entryId, FileTransfer.Completed)
+                            }
+                        }
+                        return@launch
+                    } catch (failure: MeshNodeException) {
+                        if (failure.failure == MeshFailure.Corrupt) {
+                            corruptThisAttempt += provider.id
+                            synchronized(corruptProviders) { corruptProviders.getOrPut(key) { mutableSetOf() }.add(provider.id) }
+                        }
+                        if (failure.failure in setOf(MeshFailure.Unavailable, MeshFailure.Timeout, MeshFailure.Interrupted, MeshFailure.Corrupt) && index < providers.lastIndex) continue
+                        updateTransfer(meshId, entryId, when (failure.failure) {
+                            MeshFailure.Unavailable -> FileTransfer.SourceUnavailable
+                            MeshFailure.Cancelled -> FileTransfer.Cancelled
+                            else -> FileTransfer.Failed(failure.failure, corruptThisAttempt.size == providers.size)
+                        })
+                        return@launch
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                updateTransfer(meshId, entryId, FileTransfer.Cancelled)
+                throw cancelled
+            } catch (failure: MeshNodeException) {
+                updateTransfer(meshId, entryId, FileTransfer.Failed(failure.failure))
+            } catch (failure: Exception) {
+                updateTransfer(meshId, entryId, FileTransfer.Failed(MeshFailure.Io))
+            }
+        }
+        synchronized(transfers) { transfers[key] = job }
+        job.invokeOnCompletion { synchronized(transfers) { if (transfers[key] == job) transfers.remove(key) } }
+    }
+
+    fun cancel(meshId: String, entryId: String) {
+        synchronized(transfers) { transfers[meshId to entryId] }?.cancel()
+    }
+
+    suspend fun export(meshId: String, entryId: String, action: String = "Save",
+        successMessage: String = "Saved to your chosen location.", destination: suspend (MeshFiles, CatalogEntry) -> Unit): ExportResult {
+        fun failed(message: String): ExportResult.Failed {
+            val result = ExportResult.Failed(message)
+            update(meshId) { it.copy(exportMessage = "$action failed: $message") }
+            return result
+        }
+        val entry = catalogs.entries(meshId).value.firstOrNull { it.id.rowKey() == entryId }
+            ?: return failed("This group entry is no longer available. Choose it again.")
+        val files = mesh.files.value ?: return failed("AFM's node stopped. Restart AFM.")
+        return try {
+            if (!files.hasBlob(entry.hash)) return failed("This copy is damaged or missing. Download it again.")
+            destination(files, entry)
+            update(meshId) { it.copy(exportMessage = successMessage) }
+            ExportResult.Saved
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: MeshNodeException) {
+            failed(if (failure.failure == MeshFailure.Missing || failure.failure == MeshFailure.Corrupt)
+                "This copy is damaged or missing. Download it again." else fileFailureMessage(failure.failure))
+        } catch (failure: Exception) {
+            failed(fileFailureMessage(MeshFailure.Destination))
+        }
+    }
+
+    fun reportCleanup(meshId: String, outcome: DocumentCleanup) {
+        val note = when (outcome) {
+            DocumentCleanup.Deleted -> return
+            DocumentCleanup.Truncated -> "The provider kept an empty document; delete it if unwanted."
+            DocumentCleanup.Failed -> "The incomplete document may remain; delete it manually."
+            DocumentCleanup.Untouched -> "Your existing file was not changed."
+        }
+        update(meshId) { it.copy(exportMessage = listOfNotNull(it.exportMessage, note).joinToString(" ")) }
+    }
+
+    private fun updateTransfer(meshId: String, entryId: String, transfer: FileTransfer) {
+        if (mesh.state.value.groups.none { it.id == meshId } ||
+            catalogs.entries(meshId).value.none { it.id.rowKey() == entryId }) return
+        update(meshId) { it.copy(transfers = it.transfers + (entryId to transfer)) }
     }
 
     private fun update(meshId: String, change: (FilesState) -> FilesState) {
-        mutableState.update { it + (meshId to change(it[meshId] ?: FilesState())) }
+        mutableState.update { current ->
+            val previous = current[meshId] ?: return@update current
+            current + (meshId to change(previous))
+        }
     }
 }

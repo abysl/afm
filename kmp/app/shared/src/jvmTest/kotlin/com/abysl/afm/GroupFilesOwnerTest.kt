@@ -101,7 +101,7 @@ class GroupFilesOwnerTest {
             waitFor("dismiss warning") { files.state.value.getValue(group).catalogProblem == null }
             val absentGroup = "e".repeat(64)
             files.addFile(absentGroup, "orphan.txt") { it.importFile(root.resolve("first").path) }
-            waitFor("add failed") { files.state.value[absentGroup]?.message?.startsWith("Could not add") == true }
+            assertTrue(absentGroup !in files.state.value)
             run.cancelAndJoin()
             assertTrue(catalogs.remove(group, catalogs.entries(group).value.first().id) is RemoveResult.Failed)
         } finally { run.cancelAndJoin(); scope.cancel(); root.deleteRecursively() }

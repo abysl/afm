@@ -23,12 +23,16 @@ class MainActivity : ComponentActivity() {
             val requestScan = rememberPairingScannerLauncher(model.scanner)
             val fileState by model.files.state.collectAsState()
             val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> model.selectedFile(uri) }
+            val savePicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri -> model.selectedSave(uri) }
             App(
                 store = model.store,
                 files = fileState,
                 onPickFile = { group -> model.pickFile(group); filePicker.launch(arrayOf("*/*")) },
                 onRemoveFile = model.files::remove,
                 onClearFileMessage = model.files::clearMessage,
+                onDownload = model.files::download,
+                onCancelDownload = model.files::cancel,
+                onSaveFile = { group, entry -> model.selectSave(group, entry)?.let(savePicker::launch) },
                 mesh = mesh,
                 onCreateGroup = model::createGroup,
                 onRefreshTicket = model::refreshTicket,

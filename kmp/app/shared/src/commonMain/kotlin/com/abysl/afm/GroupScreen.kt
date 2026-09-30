@@ -59,6 +59,9 @@ fun GroupScreen(
     onPickFile: (String) -> Unit = {},
     onRemoveFile: (String, String) -> Unit = { _, _ -> },
     onClearFileMessage: (String) -> Unit = {},
+    onDownload: (String, String) -> Unit = { _, _ -> },
+    onCancelDownload: (String, String) -> Unit = { _, _ -> },
+    onSaveFile: (String, String) -> Unit = { _, _ -> },
 ) {
     var code by remember(group.id) { mutableStateOf("") }
     LaunchedEffect(group.id, addedTicket) {
@@ -110,15 +113,41 @@ fun GroupScreen(
         if (files.busy) Text(if (files.importing) "Importing file…" else "Updating group files…")
         files.message?.let { Text(it) }
         files.catalogProblem?.let { Text(it) }
-        if (files.message != null || files.catalogProblem != null) {
+        if (files.message != null || files.catalogProblem != null || files.exportMessage != null) {
             TextButton(onClick = { onClearFileMessage(group.id) }) { Text("Dismiss file message") }
         }
+        files.exportMessage?.let { Text(it) }
         if (files.entries.isEmpty()) Text("No files in this group yet.")
         files.entries.forEach { entry ->
             key(entry.id) {
                 Column {
                     Text(entry.name)
                     Text("${fileSize(entry.size)} · Added by ${entry.author} · ${if (entry.local) "On this device" else "Not on this device"}")
+                    if (entry.local) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { onSaveFile(group.id, entry.id) }) { Text("Save ${entry.name}") }
+                        }
+                    } else {
+                        when (val transfer = files.transfers[entry.id]) {
+                            FileTransfer.Queued -> Text("Queued for download")
+                            is FileTransfer.Transferring -> Text("Downloading: ${fileSize(transfer.received)} / ${fileSize(transfer.total)}")
+                            FileTransfer.Verifying -> Text("Verifying file…")
+                            FileTransfer.Completed -> Text("Downloaded into AFM. Save separately to your location.")
+                            FileTransfer.SourceUnavailable -> Text("Source unavailable: no online group member could provide this file. Retry when a member reconnects.")
+                            FileTransfer.Cancelled -> Text("Download cancelled")
+                            is FileTransfer.Failed -> Text(if (transfer.allProvidersCorrupt)
+                                "Download failed: The file failed verification on every available member. Ask a member to re-add it or retry later."
+                                else "Download failed: ${fileFailureMessage(transfer.reason)}")
+                            null -> Unit
+                        }
+                        if (files.transfers[entry.id] is FileTransfer.Queued || files.transfers[entry.id] is FileTransfer.Transferring || files.transfers[entry.id] is FileTransfer.Verifying) {
+                            TextButton(onClick = { onCancelDownload(group.id, entry.id) }) { Text("Cancel download") }
+                        } else {
+                            TextButton(enabled = ready, onClick = { onDownload(group.id, entry.id) }) {
+                                Text(if (files.transfers[entry.id] == null) "Download ${entry.name}" else "Retry download")
+                            }
+                        }
+                    }
                     TextButton(enabled = ready && !files.busy, onClick = { removeEntryId = entry.id }) { Text("Remove ${entry.name}") }
                 }
             }

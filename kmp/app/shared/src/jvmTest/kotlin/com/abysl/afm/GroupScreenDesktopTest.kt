@@ -1,5 +1,9 @@
 package com.abysl.afm
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -11,6 +15,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runComposeUiTest
 import blue.rae.spirit.sdk.GroupState
@@ -42,11 +47,13 @@ class GroupScreenDesktopTest {
     fun duplicateNamesAndRemoveRequireConfirmation() = runComposeUiTest {
         val rows = listOf(FileRow("a", "same.txt", 3, "Laptop", true), FileRow("b", "same.txt", 8, "Phone", false))
         var removed: String? = null
-        setContent { MaterialTheme { GroupScreen(group, "self", true, false, false, {}, { _, _ -> }, {},
-            files = FilesState(entries = rows), onRemoveFile = { _, id -> removed = id }) } }
+        setContent { MaterialTheme { Column(Modifier.verticalScroll(rememberScrollState())) {
+            GroupScreen(group, "self", true, false, false, {}, { _, _ -> }, {},
+                files = FilesState(entries = rows), onRemoveFile = { _, id -> removed = id })
+        } } }
         onNodeWithText("3 B · Added by Laptop · On this device").assertIsDisplayed()
-        onNodeWithText("8 B · Added by Phone · Not on this device").assertIsDisplayed()
-        onAllNodesWithText("Remove same.txt")[0].performClick()
+        onNodeWithText("8 B · Added by Phone · Not on this device").performScrollTo().assertIsDisplayed()
+        onAllNodesWithText("Remove same.txt")[0].performScrollTo().performClick()
         onNodeWithText("This removes the group entry, not the file itself. Members who downloaded it keep their copies.").assertIsDisplayed()
         onNodeWithText("Cancel").performClick()
         runOnIdle { assertEquals(null, removed) }
@@ -59,6 +66,52 @@ class GroupScreenDesktopTest {
         onNodeWithText("Importing file…").assertExists()
         onNodeWithText("Could not save group files.").assertExists()
         onNodeWithText("Dismiss file message").assertExists()
+    }
+
+    @Test
+    fun remoteShowsTransferAndLocalSave() = runComposeUiTest {
+        val remote = FileRow("remote", "report.pdf", 1024, "Phone", false)
+        val local = FileRow("local", "photo.jpg", 100, "Laptop", true)
+        val state = mutableStateOf(FilesState(entries = listOf(remote, local)))
+        var requested: String? = null
+        setContent { MaterialTheme { Column(Modifier.verticalScroll(rememberScrollState())) {
+            GroupScreen(group, "self", true, false, false, {}, { _, _ -> }, {},
+                files = state.value, onDownload = { _, id -> requested = id })
+        } } }
+        onNodeWithText("Download report.pdf").performClick()
+        runOnIdle { assertEquals("remote", requested); state.value = state.value.copy(transfers = mapOf("remote" to FileTransfer.Queued)) }
+        onNodeWithText("Queued for download").assertIsDisplayed()
+        onNodeWithText("Cancel download").assertIsDisplayed()
+        runOnIdle { state.value = state.value.copy(transfers = mapOf("remote" to FileTransfer.Transferring(512, 1024))) }
+        onNodeWithText("Downloading: 512 B / 1 KiB").assertIsDisplayed()
+        runOnIdle { state.value = state.value.copy(transfers = mapOf("remote" to FileTransfer.SourceUnavailable)) }
+        onNodeWithText("Retry download").assertIsDisplayed()
+        runOnIdle { state.value = state.value.copy(transfers = mapOf("remote" to FileTransfer.Failed(blue.rae.spirit.sdk.MeshFailure.Corrupt, true))) }
+        onNodeWithText("Download failed: The file failed verification on every available member. Ask a member to re-add it or retry later.").assertExists()
+        onNodeWithText("Save photo.jpg").performScrollTo().assertIsDisplayed()
+        onNodeWithText("Save report.pdf").assertDoesNotExist()
+    }
+
+    @Test
+    fun transferDisplaySurvivesScreenRecreation() = runComposeUiTest {
+        val generation = mutableIntStateOf(0)
+        val files = mutableStateOf(FilesState(entries = listOf(FileRow("remote", "report.pdf", 1024, "Phone", false)),
+            transfers = mapOf("remote" to FileTransfer.Queued)))
+        setContent { key(generation.intValue) { MaterialTheme {
+            GroupScreen(group, "self", true, false, false, {}, { _, _ -> }, {}, files = files.value)
+        } } }
+        onNodeWithText("Queued for download").assertIsDisplayed()
+        runOnIdle { generation.intValue++ }
+        onNodeWithText("Queued for download").assertIsDisplayed()
+        runOnIdle { files.value = files.value.copy(transfers = mapOf("remote" to FileTransfer.Verifying)) }
+        onNodeWithText("Verifying file…").assertIsDisplayed()
+    }
+
+    @Test
+    fun typedFileFailuresStayActionable() {
+        assertEquals("The file failed verification. Try another member.", fileFailureMessage(blue.rae.spirit.sdk.MeshFailure.Corrupt))
+        assertEquals("Could not write to the chosen location. Check available space and permissions, then try again.", fileFailureMessage(blue.rae.spirit.sdk.MeshFailure.Destination))
+        assertEquals("AFM file storage is not set up. Restart AFM; if this continues, report the problem.", fileFailureMessage(blue.rae.spirit.sdk.MeshFailure.StoreNotConfigured))
     }
 
     @Test

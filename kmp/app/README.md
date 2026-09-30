@@ -102,4 +102,17 @@ AFM prototype store remains separate. Desktop group catalogs use
 
 ## Group files
 
-On Android choose **Add file** to open the system document picker; AFM streams the chosen document into its verified local store. On Linux desktop the native file dialog imports the selected path. Canceling a picker does nothing. Each group has a flat list with sizes, author devices and local availability. Files you add are visible to all current and future group members; AFM neither scans the filesystem nor uploads unrelated files. Removing an entry requires confirmation and stops advertising it, but removal is not erasure: members who downloaded the bytes keep their copies. Download, open and save are not available in this first files increment.
+On Android choose **Add file** to open the system document picker; AFM streams the chosen document into its verified local store. On Linux desktop the native file dialog imports the selected path. Canceling a picker does nothing. Each group has a flat list with sizes, author devices and local availability. Files you add are visible to all current and future group members; AFM neither scans the filesystem nor uploads unrelated files. Removing an entry requires confirmation and stops advertising it, but removal is not erasure: members who downloaded the bytes keep their copies.
+
+Download stays explicit: AFM tries the entry's author first if online, then other online members of that group. Unavailable, timed-out, interrupted or corrupt sources fall back to the next member. Queued, transferring, verifying, completed, canceled, failed and source-unavailable states support Cancel and Retry. Downloads have no resume, and a failed fetch never marks partial bytes local. An import is an immutable snapshot; changing the original does not update the group entry.
+
+Downloaded bytes in AFM's verified store are separate from **Save** to a chosen
+destination. Android uses the system Create Document picker and writes a verified
+stream only after export verification. If Save fails before opening a nonempty
+or unknown-size document, AFM leaves it alone and reports that the existing file
+was not changed; the same applies when a picker request expires. For an empty
+destination or one opened for writing, AFM first asks the provider to delete an
+incomplete document, then falls back to truncating it if deletion is unsupported.
+If both fail, it warns you to remove the incomplete document yourself. A completed
+verified write is kept even if the screen closes. Desktop Save uses the native
+save dialog and Spirit's atomic verified file export. Open is not available in this increment. The group list is flat, removal is not erasure, and physical devices, real SAF providers, and relays still need separate validation.
