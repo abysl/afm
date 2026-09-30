@@ -2,6 +2,8 @@ package com.abysl.afm
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
@@ -19,8 +21,14 @@ class MainActivity : ComponentActivity() {
             val pendingScan by model.scanner.pendingStep.collectAsState()
             val actions by model.actions.state.collectAsState()
             val requestScan = rememberPairingScannerLauncher(model.scanner)
+            val fileState by model.files.state.collectAsState()
+            val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> model.selectedFile(uri) }
             App(
                 store = model.store,
+                files = fileState,
+                onPickFile = { group -> model.pickFile(group); filePicker.launch(arrayOf("*/*")) },
+                onRemoveFile = model.files::remove,
+                onClearFileMessage = model.files::clearMessage,
                 mesh = mesh,
                 onCreateGroup = model::createGroup,
                 onRefreshTicket = model::refreshTicket,

@@ -38,6 +38,10 @@ fun App(
     onLeaveGroup: (String) -> Unit = {},
     groupBackHandler: (@Composable (() -> Unit) -> Unit)? = null,
     scanDeviceButton: (@Composable (String) -> Unit)? = null,
+    files: Map<String, FilesState> = emptyMap(),
+    onPickFile: (String) -> Unit = {},
+    onRemoveFile: (String, String) -> Unit = { _, _ -> },
+    onClearFileMessage: (String) -> Unit = {},
 ) {
     var selectedGroupId by rememberSaveable { mutableStateOf<String?>(null) }
     MaterialTheme {
@@ -67,6 +71,8 @@ fun App(
                         actions.adding, actions.leaving, addedTicket = actions.addedTicket, onBack = { selectedGroupId = null }, onAddDevice = onAddDevice,
                         onLeave = { onLeaveGroup(group.id) },
                         scanDeviceButton = scanDeviceButton,
+                        files = files[group.id] ?: FilesState(),
+                        onPickFile = onPickFile, onRemoveFile = onRemoveFile, onClearFileMessage = onClearFileMessage,
                     )
                     failureMessage(state.failure, state.error, actions.lastTicket == state.invitation?.ticket && actions.lastTicket != null)?.let { error ->
                         Text(error, color = MaterialTheme.colorScheme.error)
@@ -79,10 +85,9 @@ fun App(
                 }
                 Spacer(Modifier.height(24.dp))
             }
-            if (store == null) {
-                Text("file storage is not available on this platform")
-            } else {
-                AfmPanel(store)
+            if (mesh?.groups?.any { it.id == selectedGroupId } != true) {
+                if (store == null) Text("file storage is not available on this platform")
+                else AfmPanel(store)
             }
         }
     }

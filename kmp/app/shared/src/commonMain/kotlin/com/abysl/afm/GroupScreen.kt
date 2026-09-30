@@ -26,7 +26,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,6 +55,10 @@ fun GroupScreen(
     onLeave: () -> Unit,
     addedTicket: String? = null,
     scanDeviceButton: (@Composable (String) -> Unit)? = null,
+    files: FilesState = FilesState(),
+    onPickFile: (String) -> Unit = {},
+    onRemoveFile: (String, String) -> Unit = { _, _ -> },
+    onClearFileMessage: (String) -> Unit = {},
 ) {
     var code by remember(group.id) { mutableStateOf("") }
     LaunchedEffect(group.id, addedTicket) {
@@ -63,6 +66,7 @@ fun GroupScreen(
     }
     var confirmLeave by rememberSaveable(group.id) { mutableStateOf(false) }
     var menuOpen by remember(group.id) { mutableStateOf(false) }
+    var removeEntryId by rememberSaveable(group.id) { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("Groups") }
@@ -101,7 +105,33 @@ fun GroupScreen(
         if (leaving) Text("Leaving…")
         HorizontalDivider()
         Text("Files", style = MaterialTheme.typography.titleLarge)
-        Text("Files coming soon. Group files will be visible to all current and future members.")
+        Text("Files added to this group are visible to all current and future members. AFM does not scan your files or upload unrelated files.")
+        Button(enabled = ready && !files.busy, onClick = { onPickFile(group.id) }) { Text("Add file") }
+        if (files.busy) Text(if (files.importing) "Importing file…" else "Updating group files…")
+        files.message?.let { Text(it) }
+        files.catalogProblem?.let { Text(it) }
+        if (files.message != null || files.catalogProblem != null) {
+            TextButton(onClick = { onClearFileMessage(group.id) }) { Text("Dismiss file message") }
+        }
+        if (files.entries.isEmpty()) Text("No files in this group yet.")
+        files.entries.forEach { entry ->
+            key(entry.id) {
+                Column {
+                    Text(entry.name)
+                    Text("${fileSize(entry.size)} · Added by ${entry.author} · ${if (entry.local) "On this device" else "Not on this device"}")
+                    TextButton(enabled = ready && !files.busy, onClick = { removeEntryId = entry.id }) { Text("Remove ${entry.name}") }
+                }
+            }
+        }
+    }
+    files.entries.firstOrNull { it.id == removeEntryId }?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { removeEntryId = null },
+            title = { Text("Remove ${entry.name}?") },
+            text = { Text("This removes the group entry, not the file itself. Members who downloaded it keep their copies.") },
+            confirmButton = { TextButton(onClick = { onRemoveFile(group.id, entry.id); removeEntryId = null }) { Text("Remove file") } },
+            dismissButton = { TextButton(onClick = { removeEntryId = null }) { Text("Cancel") } },
+        )
     }
     if (confirmLeave) AlertDialog(
         onDismissRequest = { confirmLeave = false },

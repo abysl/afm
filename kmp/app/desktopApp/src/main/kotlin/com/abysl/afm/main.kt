@@ -11,6 +11,8 @@ import androidx.compose.ui.window.application
 import blue.rae.spirit.sdk.MeshSession
 import blue.rae.spirit.sdk.SpiritNode
 import java.io.File
+import java.awt.FileDialog
+import java.awt.Frame
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
@@ -27,6 +29,7 @@ fun main() = application {
     val scope = rememberCoroutineScope()
     val catalogs = remember(mesh) { GroupCatalogs(File(home, ".spirit2/afm-groups"), mesh) }
     val actions = remember(mesh) { GroupActions(mesh, scope) }
+    val files = remember(mesh) { GroupFilesOwner(catalogs, mesh, scope) }
     val nodeJob = remember {
         scope.launch {
             val catalogJob = launch { catalogs.run() }
@@ -45,6 +48,7 @@ fun main() = application {
     var closing by remember { mutableStateOf(false) }
     val state by mesh.state.collectAsState()
     val actionState by actions.state.collectAsState()
+    val fileState by files.state.collectAsState()
     Window(
         onCloseRequest = {
             if (!closing) {
@@ -59,6 +63,20 @@ fun main() = application {
     ) {
         App(
             store = store,
+            files = fileState,
+            onPickFile = { group ->
+                val frame = Frame()
+                val dialog = FileDialog(frame, "Add file", FileDialog.LOAD)
+                try {
+                    dialog.isVisible = true
+                    dialog.file?.let { name ->
+                        val path = File(dialog.directory, name).absolutePath
+                        files.addFile(group, name) { backend -> backend.importFile(path) }
+                    }
+                } finally { dialog.dispose(); frame.dispose() }
+            },
+            onRemoveFile = files::remove,
+            onClearFileMessage = files::clearMessage,
             mesh = state.copy(busy = state.busy || closing),
             onCreateGroup = { name -> scope.launch { mesh.createGroup(name) } },
             onClearMessages = actions::clearMessages,

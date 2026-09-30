@@ -72,10 +72,9 @@ Android keeps one `MeshSession` in its Activity ViewModel across rotation and
 scanning, using `noBackupFilesDir/afm-node` for identity and membership. Desktop
 uses `~/.spirit2/afm-node`. The migration is one-way: an older build refuses a migrated
 node directory, so prerelease users cannot downgrade. Spirit's process-wide node-directory lease waits for a closing owner
-before reopening, or reports `NodeBusy` after 15 seconds. The independent blob store still uses the existing app directory and remains open
-until its owner closes even if opening the node fails. Neither the groups screen
-nor this store implements file transfer yet; the group Files section is a
-placeholder for A2/A3. The Android scanner model uses `SavedStateHandle` to keep the target group through Activity recreation and never retains an Activity, Context, or launcher.
+before reopening, or reports `NodeBusy` after 15 seconds. The independent demo blob store still uses the existing app directory and remains open
+until its owner closes even if opening the node fails. Group file imports use
+the node-owned store at the sibling `afm-store` directory, not that demo store. The Android scanner model uses `SavedStateHandle` to keep the target group through Activity recreation and never retains an Activity, Context, or launcher.
 Its permission and camera steps wait for the existing result after restoration.
 There is no Android foreground service. In-flight actions finish before the
 node shuts down; cancelling a screen does not undo an enrollment. A leave
@@ -100,3 +99,7 @@ non-backed-up `noBackupFilesDir` or desktop's `~/.spirit2` directory. These must
 not overlap: Spirit rejects equal or nested node/store directories. The older
 AFM prototype store remains separate. Desktop group catalogs use
 `~/.spirit2/afm-groups/groups/<meshId>`.
+
+## Group files
+
+On Android choose **Add file** to open the system document picker; AFM streams the chosen document into its verified local store. On Linux desktop the native file dialog imports the selected path. Canceling a picker does nothing. Each group has a flat list with sizes, author devices and local availability. Files you add are visible to all current and future group members; AFM neither scans the filesystem nor uploads unrelated files. Removing an entry requires confirmation and stops advertising it, but removal is not erasure: members who downloaded the bytes keep their copies. Download, open and save are not available in this first files increment.
