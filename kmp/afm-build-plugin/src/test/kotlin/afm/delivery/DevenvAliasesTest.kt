@@ -207,7 +207,7 @@ class DevenvAliasesTest {
     private fun findKmpRoot(): Path =
         generateSequence(Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize()) { it.parent }
             .firstOrNull { candidate ->
-                candidate.resolve("devenv.nix").exists() && candidate.resolve("build-logic").isDirectory()
+                candidate.resolve("devenv.nix").exists() && candidate.resolve("afm-build-plugin").isDirectory()
             }
             ?: error("Cannot locate the AFM KMP directory from the Gradle test working directory")
 

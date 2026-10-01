@@ -5,4 +5,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "afm-build-logic"
+rootProject.name = "afm-build-plugin"

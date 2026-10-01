@@ -127,7 +127,7 @@ class AfmDeliveryPlugin : Plugin<Project> {
                 }
             }
         }
-        val buildLogicTests = gradle.includedBuild("afm-build-logic").task(":test")
+        val buildLogicTests = gradle.includedBuild("afm-build-plugin").task(":test")
         val sdkTests = gradle.includedBuild("spirit2").task(":sdk:jvmTest")
         val tests = listOf(verifyNative, rustTests, buildLogicTests, sdkTests, ":app:shared:jvmTest", ":app:androidApp:testDebugUnitTest")
         val reportSources = listOf(
@@ -138,7 +138,7 @@ class AfmDeliveryPlugin : Plugin<Project> {
             kmp.resolve("app/androidApp/build/reports/tests/testDebugUnitTest") to "android-app/reports",
             spirit.resolve("kmp/sdk/build/test-results") to "sdk/test-results",
             spirit.resolve("kmp/sdk/build/reports/tests") to "sdk/reports",
-            kmp.resolve("build-logic/build/test-results/test") to "delivery/test-results",
+            kmp.resolve("afm-build-plugin/build/test-results/test") to "delivery/test-results",
         )
         val reports = tasks.register<Tar>("afmTestReports") {
             group = "delivery"

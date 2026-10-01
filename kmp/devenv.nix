@@ -190,10 +190,10 @@ in {
       exec "$DEVENV_ROOT/gradlew" -p "$DEVENV_ROOT" :app:shared:jsBrowserTest :app:shared:wasmJsBrowserTest "$@"
     '';
     test-launcher = script "Run Kotlin Android launcher unit tests without a device" ''
-      exec "$DEVENV_ROOT/gradlew" -p "$DEVENV_ROOT/build-logic" test --tests afm.delivery.AndroidLauncherTest --no-configuration-cache "$@"
+      exec "$DEVENV_ROOT/gradlew" -p "$DEVENV_ROOT/afm-build-plugin" test --tests afm.delivery.AndroidLauncherTest --no-configuration-cache "$@"
     '';
     test-aliases = script "Test generated root and KMP command dispatch through Kotlin mocks" ''
-      exec "$DEVENV_ROOT/gradlew" -p "$DEVENV_ROOT/build-logic" test --tests afm.delivery.DevenvAliasesTest --no-configuration-cache "$@"
+      exec "$DEVENV_ROOT/gradlew" -p "$DEVENV_ROOT/afm-build-plugin" test --tests afm.delivery.DevenvAliasesTest --no-configuration-cache "$@"
     '';
     test-plumbing = script "Verify Rust, SDK, desktop, launcher, and alias plumbing; excludes device, browser, and packages" ''
       test-rust

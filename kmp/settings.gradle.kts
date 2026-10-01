@@ -1,7 +1,5 @@
 pluginManagement {
-    includeBuild("build-logic") {
-        name = "afm-build-logic"
-    }
+    includeBuild("afm-build-plugin")
     repositories {
         google {
             mavenContent {

@@ -9,7 +9,7 @@ credentials.
 From `kmp/`:
 
 ```sh
-devenv shell -- ./gradlew -p build-logic test --no-configuration-cache
+devenv shell -- ./gradlew -p afm-build-plugin test --no-configuration-cache
 devenv shell -- ./gradlew afmPrepareNative --no-configuration-cache
 devenv shell -- ./gradlew afmCiBuild -PafmRelease=true --dry-run --no-configuration-cache
 ```
@@ -24,7 +24,7 @@ one-day key, verifies it, and deletes the key/output. Build the fixture first:
 
 ```sh
 AFM_VERSION_CODE=42 AFM_VERSION_NAME=0.1.42 devenv shell -- release-android
-AFM_SIGNING_SMOKE_APK="$PWD/app/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk" devenv shell -- ./gradlew -p build-logic test --no-configuration-cache
+AFM_SIGNING_SMOKE_APK="$PWD/app/androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk" devenv shell -- ./gradlew -p afm-build-plugin test --no-configuration-cache
 ```
 
 That disposable identity is never a release key and is never published. Without

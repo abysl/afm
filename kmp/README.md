@@ -160,7 +160,7 @@ directly as a `file:` URL is not a supported launch path.
 ## CI delivery
 
 The new delivery pipeline is implemented by the `afm.delivery` Gradle plugin
-in [build-logic](build-logic/README.md), not Python orchestration. It exposes
+in [afm-build-plugin](afm-build-plugin/README.md), not Python orchestration. It exposes
 `afmPrepareNative`, `afmCiBuild`, `afmDeliveryPreflight`, and `afmDeliver`.
 Both CI and developer preparation invoke Cargo and UniFFI directly. Launcher and
 alias tests now run through Kotlin/JUnit, and AFM contains no Python scripts.

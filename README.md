@@ -47,7 +47,7 @@ the current UniFFI/JNA native store is available on JVM desktop and Android.
 Gradle Kotlin DSL and tested Kotlin JVM build logic own native preparation,
 Android launching, tests, versioning, signing, manifests, and artifact publication.
 Cargo owns Rust builds; UniFFI generates the SDK bindings. There is no Python
-build or release path. See [build-logic](kmp/build-logic/README.md).
+build or release path. See [afm-build-plugin](kmp/afm-build-plugin/README.md).
 
 Normal development versions remain `1` / `0.1.0`. Trusted CI development prereleases use the
 checked-in `release-version-base.txt` plus all reachable AFM commits, so extracting
