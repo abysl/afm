@@ -21,7 +21,7 @@ Run from `kmp/` in its devenv environment. The CI runner provides event metadata
 
 | Invocation | Responsibility |
 | --- | --- |
-| `./gradlew -p build-logic prepareSpirit2 --no-configuration-cache` | Initialize only the pinned Spirit2 checkout; reject dirty/mismatched existing checkouts |
+| `./gradlew -p afm-build-plugin prepareSpirit2 --no-configuration-cache` | Initialize only the pinned Spirit2 checkout; reject dirty/mismatched existing checkouts |
 | `./gradlew afmDeliveryPreflight -PafmRelease=true --no-daemon --no-configuration-cache` | Require trusted main, exact clean source/pin, full history, and delivery credentials |
 | `./gradlew afmPrepareNative -PafmRelease=true --no-configuration-cache` | Build host Rust/UniFFI, generate Kotlin, build both Android native ABIs, record source context |
 | `./gradlew afmCiBuild -PafmRelease=true --no-configuration-cache` | Test delivery logic, Kotlin launcher/aliases, Rust, SDK, and AFM JVM; build unsigned APK/AAB and Linux `.deb`; archive reports |

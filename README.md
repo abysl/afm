@@ -3,7 +3,8 @@
 AFM is a Compose Multiplatform file manager backed by Spirit2. The active app is
 `kmp/`; `bevy/` and `godot/` are independent feature-flow prototypes. The current
 app demonstrates native content-addressed storage and
-[QR mesh pairing](kmp/app/README.md#qr-mesh-pairing) on Android and desktop.
+[groups and device invitations](kmp/app/README.md#groups-and-device-invitations)
+on Android and desktop.
 The first cross-device file-manager UX and real file transfer remain on the
 [project roadmap](plans/first-file-transfer/plan.md).
 
@@ -46,7 +47,7 @@ the current UniFFI/JNA native store is available on JVM desktop and Android.
 Gradle Kotlin DSL and tested Kotlin JVM build logic own native preparation,
 Android launching, tests, versioning, signing, manifests, and artifact publication.
 Cargo owns Rust builds; UniFFI generates the SDK bindings. There is no Python
-build or release path. See [build-logic](kmp/build-logic/README.md).
+build or release path. See [afm-build-plugin](kmp/afm-build-plugin/README.md).
 
 Normal development versions remain `1` / `0.1.0`. Trusted CI development prereleases use the
 checked-in `release-version-base.txt` plus all reachable AFM commits, so extracting

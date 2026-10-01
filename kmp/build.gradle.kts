@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnPlugin
 import org.jetbrains.kotlin.gradle.targets.wasm.yarn.WasmYarnRootEnvSpec
 
 plugins {
+    idea
     id("afm.delivery")
     alias(libs.plugins.androidApplication) apply false
     alias(libs.plugins.androidMultiplatformLibrary) apply false
@@ -21,6 +22,12 @@ plugins {
     alias(libs.plugins.composeCompiler) apply false
     alias(libs.plugins.kotlinJvm) apply false
     alias(libs.plugins.kotlinMultiplatform) apply false
+}
+
+idea {
+    module {
+        excludeDirs.add(file(".devenv"))
+    }
 }
 
 val downloadWebTools = !providers.environmentVariable("DEVENV_ROOT").isPresent

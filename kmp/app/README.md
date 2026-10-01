@@ -9,16 +9,15 @@
 | `:app:desktopApp` | Desktop JVM entry point |
 | `:app:webApp` | JavaScript and Wasm web entry point |
 
-The shared module consumes `blue.rae.spirit:spirit-mesh` for portable node and
-pairing-session contracts, and `blue.rae.spirit:spirit-sdk` for JVM and Android
-native nodes/stores. Both come from the pinned `deps/spirit2/kmp` composite
-(relative to the repository root).
-Spirit owns pairing, ticket expiry, membership, and heartbeat presence; AFM owns
-presentation, the Android camera, data-directory selection, and app lifecycle.
-Web and iOS expose the UI without a native backend because UniFFI uses JNA.
+The shared module consumes `blue.rae.spirit:spirit-mesh` for the portable
+`MeshSession`/`MeshNode` contracts and `blue.rae.spirit:spirit-sdk` for JVM and
+Android native nodes/stores. Both come from the pinned `deps/spirit2/kmp`
+composite build. Spirit owns tickets, group membership, departures and presence;
+AFM owns the screens, Android camera, data directories and lifecycle. Web and iOS
+expose the UI without a native node because UniFFI uses JNA.
 
 Use the parent project's [run/test/release matrix](../README.md#run-test-release-matrix)
-so native builds and binding generation run before the relevant Gradle tasks:
+so native builds and binding generation run before the consuming Gradle tasks:
 
 ```sh
 cd ..
@@ -29,60 +28,112 @@ devenv shell -- test-plumbing
 devenv shell -- release-desktop
 ```
 
-The parent environment reuses Spirit2's native preparation, supplies the Android
-emulator fallback, and configures the runtime dependencies required by Compose
-Desktop. Browser launch commands run the UI without a native storage backend;
-Android and JVM tests exercise AFM through Kotlin, UniFFI, and Rust.
+## Groups and device invitations
 
-## QR mesh pairing
+1. Select **New group** on the groups home and enter a name. Fresh installs do
+   not create a group automatically. Existing installs show their original
+   `AFM mesh` as an ordinary group, retaining its signed identity and members.
+2. To join someone else's group, select **Join a group** and show your device's
+   QR or ticket text to a current member. The invitation is not tied to any
+   group. The member chooses which group to add you to; your device displays
+   **Joined Family** (with your group name) when it learns of the enrollment.
+3. To invite another device, open the desired group and choose **Scan QR code** or **Add pasted code**:
+   scan its displayed QR with the bundled Android camera or paste its ticket
+   into **Paste code** on Android or desktop. Scanning never creates a group.
+   Camera permission, denial and cancellation are handled in AFM. The pending
+   target group is retained through Android Activity recreation; repeat scans
+   cannot redirect an in-flight ticket into another group.
+4. QR tickets are single-use bearer secrets valid for up to five minutes. Show
+   one only to trusted devices. Select **Refresh QR** when the code expires or
+   was used. A rejected ticket needs a fresh QR; an unreachable device needs a
+   working connection. A device can belong to up to 64 groups.
+5. Members show both a colored presence indicator and **Online**/**Offline**.
+   Only a recent authenticated ping or pong counts as online; Spirit pings
+   every five seconds and a peer stays online for 60 seconds after a reply.
+   Peers need compatible Spirit versions. Closing AFM eventually makes a
+   device appear offline. Any member can add a device; there are no roles,
+   owners or admin permissions.
 
-1. Open AFM on Android B and on fresh devices A and C (Android or desktop).
-2. On B, select **Pair device**, grant camera permission, and scan C's displayed
-   QR. B creates a mesh on its first scan; C joins that mesh.
-3. On B, scan A's QR. Signed membership propagates until each lists the other
-   two. A and C communicate directly without requiring B to remain running.
-4. If a ticket expires or was used, select **Refresh QR** on the device displaying
-   it. Tickets are exact Spirit `spirit1` tickets: single-use, valid for up to five
-   minutes, and bearer secrets. Show them only to trusted devices.
+6. Open a group's menu and select **Leave group**. Confirm after reading that files
+   held only here become unavailable and unsynced changes are lost. If this
+   device is the last member, leaving deletes the group. AFM reports how many
+   other members were notified. Unreached members learn through a notified
+   member or on next contact with this device while it keeps a departed copy.
+   Leaving does not erase files other members already downloaded.
 
-Only Android offers **Pair device** and opens a bundled camera scanner; there is
-no external scanning service. Permission/scanner launches stay disabled until
-the in-flight result returns; denial and cancellation return to AFM safely. All
-native targets display their QR and paired devices, including offline members.
-Starting several independent meshes and then merging them is not supported. A
-failed first enrollment can leave the scanner with a founder-only mesh; its
-original receiver ticket is then withdrawn. Subsequent scans continue using that
-mesh rather than replacing successful pairings. To join an existing mesh, have
-one of its members scan the fresh device's ticket, not the other way around.
+Adding a device lets it see the group's members, and eventually all files in
+that group, including files added later. Showing your QR lets its holder add
+**you** to one group of their choosing. Being in two groups reveals the same
+device identity to members of both. Leaving a group is not revocation: already
+downloaded copies stay on other devices, and readmission may expose this device
+to that group again. Do not show your QR to untrusted devices.
 
-The Android button is stateless. `AfmViewModel` owns a `PairingScannerModel`
-that decides whether to request permission or scan, suppresses duplicate input,
-and handles results/errors. Its pending step lives in `SavedStateHandle`;
-restoration waits for the existing activity result instead of launching again.
-The Compose adapter only registers Android launchers, reads current camera and
-permission availability at click time, and executes the model's returned command.
-The model never retains an Activity, Context, or launcher.
+Android keeps one `MeshSession` in its Activity ViewModel across rotation and
+scanning, using `noBackupFilesDir/afm-node` for identity and membership. Desktop
+uses `~/.spirit2/afm-node`. The migration is one-way: an older build refuses a migrated
+node directory, so prerelease users cannot downgrade. Spirit's process-wide node-directory lease waits for a closing owner
+before reopening, or reports `NodeBusy` after 15 seconds. The independent demo blob store still uses the existing app directory and remains open
+until its owner closes even if opening the node fails. Group file imports use
+the node-owned store at the sibling `afm-store` directory, not that demo store. The Android scanner model uses `SavedStateHandle` to keep the target group through Activity recreation and never retains an Activity, Context, or launcher.
+Its permission and camera steps wait for the existing result after restoration.
+There is no Android foreground service. In-flight actions finish before the
+node shuts down; cancelling a screen does not undo an enrollment. A leave
+confirmed while the app closes may not start. The group remains visible so
+you can retry after reopening.
 
-New meshes use a random `mesh1_...` ID independent of device identity. Members
-need compatible Spirit versions to enroll in them. Existing legacy meshes retain
-their signed IDs rather than silently migrating. The founder is not an always-on
-coordinator; any member can enroll another fresh device.
+See the [implementation plan](../../plans/multimesh-groups/plan.md) for outstanding physical camera and cross-network checks.
 
-Spirit exchanges authenticated ping/pong every five seconds while the native node
-is running. Green/Online means a ping or pong arrived from that identity less than
-60 seconds ago; red/Offline means none did. Membership gossip, attempted sends,
-and connection errors do not reset this timer. Display state is refreshed about
-once per second. Names may repeat; full node IDs distinguish peers.
+## Catalog API for the files screen
 
-Android retains one node in an Activity ViewModel across rotation and scanning,
-using `noBackupFilesDir/afm-node` for identity and membership (not cloud backup).
-Desktop uses `~/.spirit2/afm-node`, separate from the existing blob store directory.
-Closing the owner shuts down the node; reopening retains its identity and mesh,
-not cached online status. Blob storage remains open until that same owner closes,
-even if pairing cannot open its node. Native actions already in progress complete
-before node shutdown; cancelling a coroutine does not undo remote enrollment. There is no Android foreground service: process
-suspension, force-stop, or app closure can stop heartbeats and eventually make the
-device appear offline. Pairing does not implement file transfer.
+Native Android and desktop owners expose `GroupCatalogs` alongside `MeshSession`.
+`entries(meshId)` is a `StateFlow<List<CatalogEntry>>` with ID, name, BLAKE3 hash,
+size and author. Import bytes using `MeshSession.files.value` first, then call
+`addFile(meshId, name, ImportedBlob)`; call `remove(meshId, entryId)` to stop
+sharing an entry, without deleting local bytes. Fetch/export remains a separate
+UI action. `errors` exposes per-group synchronization failures. The web builds
+remain UI-only and do not instantiate a catalog. The signed format, disk layout
+and app-channel protocol are in [catalog design](../../wiki/design/catalog.md).
 
-See the [implementation plan](../../../plans/qr-mesh-pairing/plan.md) for automated
-validation and the outstanding physical camera/cross-network acceptance checks.
+The node's native blob store is `afm-store`, a sibling of `afm-node` in Android's
+non-backed-up `noBackupFilesDir` or desktop's `~/.spirit2` directory. These must
+not overlap: Spirit rejects equal or nested node/store directories. The older
+AFM prototype store remains separate. Desktop group catalogs use
+`~/.spirit2/afm-groups/groups/<meshId>`.
+
+## Group files
+
+On Android choose **Add file** to open the system document picker; AFM streams the chosen document into its verified local store. On Linux desktop the native file dialog imports the selected path. Canceling a picker does nothing. Each group has a flat list with sizes, author devices and local availability. Files you add are visible to all current and future group members; AFM neither scans the filesystem nor uploads unrelated files. Removing an entry requires confirmation and stops advertising it, but removal is not erasure: members who downloaded the bytes keep their copies.
+
+Download stays explicit: AFM tries the entry's author first if online, then other online members of that group. Unavailable, timed-out, interrupted or corrupt sources fall back to the next member. Queued, transferring, verifying, completed, canceled, failed and source-unavailable states support Cancel and Retry. Downloads have no resume, and a failed fetch never marks partial bytes local. An import is an immutable snapshot; changing the original does not update the group entry.
+
+Downloaded bytes in AFM's verified store are separate from **Save** to a chosen
+destination. Android uses the system Create Document picker and writes a verified
+stream only after export verification. If Save fails before opening a nonempty
+or unknown-size document, AFM leaves it alone and reports that the existing file
+was not changed; the same applies when a picker request expires. For an empty
+destination or one opened for writing, AFM first asks the provider to delete an
+incomplete document, then falls back to truncating it if deletion is unsupported.
+If both fail, it warns you to remove the incomplete document yourself. A completed
+verified write is kept even if the screen closes. Desktop Save uses the native
+save dialog and Spirit's atomic verified file export. The group list is flat,
+removal is not erasure, and physical devices, real SAF providers, and relays still
+need separate validation.
+
+## Open a local group file
+
+Android **Open** exports a verified copy into a randomly named subdirectory under
+the app's `cache/afm-open` and grants the chosen viewer temporary read access
+through `FileProvider` and `ACTION_VIEW`. The directory contains the entry's
+validated display name, never its content hash. AFM clears these Open copies when
+its ViewModel starts and after a group is left; the system can also evict cache
+files earlier. A viewer may lose access after cleanup, so use **Save** for a
+durable copy. When no viewer is available, use **Save** instead.
+
+Linux desktop **Open** exports to a temporary file and invokes the system default
+application on IO. The previous temporary Open directory is deleted on the next
+Open; the last one is deleted on exit. Open is hidden on Windows and macOS because
+peer-supplied names and extensions can be executable there; **Save** remains
+available. On both Android and Linux, Open refuses files without an extension
+or with an executable or script extension (case-insensitively) and directs you
+to Save instead. A build alone does not verify external viewers or real SAF providers.
+
