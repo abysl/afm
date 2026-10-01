@@ -118,7 +118,7 @@ The `spirit1` ticket stays exactly as it is: "add me to a group", with no group
 named. The member scanning it chooses the target by opening a group and choosing
 **Add device**. The receiving device accepts enrollment into a new mesh instead
 of rejecting it because it already belongs to another one. It shows
-"Added to *group* by *device*".
+"Joined *group*". The node doesn't report which device added it.
 
 The ticket remains a five-minute, single-use bearer credential. Showing it lets
 its holder add the device to any one group of their choosing, and the privacy
@@ -150,9 +150,15 @@ the same device. Spirit keeps a local, non-replicated **share set** per mesh:
 - A fetch request names `(mesh, hash)`. It is served only if the requester is a
   member of that mesh, the hash is in that mesh's share set, and a verified local
   copy exists. Every other case returns the same "unavailable" error.
-- AFM keeps each share set equal to the hashes of live file entries in that
-  group's catalog. It reconciles the set at startup and on every catalog change.
-  A member that downloads a file can therefore serve it to other members.
+- AFM keeps each share set equal to the live hashes in that group's catalog
+  that this device added to the group itself or fetched through that group. It
+  reconciles the set at startup and on every catalog change. A member that
+  downloads a file through a group can therefore serve it to that group's other
+  members.
+- A live entry alone never puts a hash in a device's share set. Otherwise a
+  member of group A could add a hash that another device holds only for group B,
+  and that device would start serving it to A. Knowing a hash, or listing it, is
+  not a credential.
 
 Alternatives rejected: letting anyone who shares any mesh fetch any hash leaks
 across groups and allows "do you have this file" probing. A Spirit-to-AFM
@@ -365,13 +371,13 @@ so no `/1` compatibility path is kept.
 ### KMP contract sketch
 
 ```kotlin
-data class MeshMember(val id: String, val generation: Long)
+data class MeshMember(val id: String, val name: String, val generation: Long)
 data class MeshStatus(
     val id: String,
     val name: String,
     val members: List<MeshMember>,
 )
-data class NodeStatus(val id: String, val name: String, val meshes: List<MeshStatus>, val devices: List<NodePeer>)
+data class NodeStatus(val id: String, val name: String, val meshes: List<MeshStatus>, val peers: List<NodePeer>)
 
 interface MeshNode {
     suspend fun status(): NodeStatus
@@ -385,20 +391,19 @@ interface MeshNode {
 ```
 
 `meshes` lists only the meshes this device is currently in, and `members`
-lists current members with their current generation. `devices` is the
+lists current members with their current generation. `peers` is the
 deduplicated set of peers across those meshes, each with one presence value.
 `leaveMesh` gains a mesh ID parameter and returns #9's `LeftMesh`, which
 carries the mesh ID, the mesh name, and the remaining and notified member counts. The CLI
 gains `--mesh` selection for `mesh add`, `mesh members`, and the `mesh leave`
 command that #9 added.
 
-The single-mesh `PairingSession` in the KMP `mesh` module splits into a
-node-wide session and a per-group session:
-
-- The node-wide session owns node lifecycle, this device's ticket, device
-  presence, and the group list.
-- The per-group session owns the group's members, the add-device action, and
-  leaving.
+The single-mesh `PairingSession` in the KMP `mesh` module is replaced by one
+`MeshSession`. It owns the node lifecycle, this device's ticket, device
+presence, and the group list, and it exposes group-scoped actions: create a
+group, add a device into a chosen group, and leave a group. One session is
+simpler than a node-wide session plus per-group sessions that would share the
+same node, locks, and presence.
 
 ## Catalog model
 
@@ -417,8 +422,10 @@ CatalogOp {
 }
 ```
 
-- `EntryId` is 16 random bytes. The tree is every `Add` whose entry has no
-  `Remove`. A `Remove` that arrives before its `Add` is kept.
+- `EntryId` is 16 random bytes. An entry is identified by its author,
+  generation and `EntryId` together, so two authors who pick the same `EntryId`
+  get separate entries on every device. The tree is every `Add` whose entry has
+  no `Remove`. A `Remove` that arrives before its `Add` is kept.
 - Rename, move, and replace are a `Remove` followed by an `Add` for the same
   hash, so no bytes move.
 - Removing a folder removes every entry the remover can see under it. A file
@@ -432,8 +439,12 @@ CatalogOp {
   still verify.
 
   If a second, different operation arrives for an existing
-  `(author, generation, seq)`, the first is kept and the conflict is surfaced as an
-  error.
+  `(author, generation, seq)`, every device keeps the same deterministic winner
+  (the one with the lowest canonical signed bytes). The losing variant still
+  travels during sync, so every device sees the conflict, which is surfaced as
+  an error. An operation is accepted only when its `seq` is exactly one more
+  than the highest contiguous `seq` already held for that author and generation,
+  so a gap can never wedge sync.
 - A device writes its next `seq` durably before publishing an operation. The
   catalog lives in the same non-backup root as the identity, so they are lost
   together. Re-joining starts a new generation at `seq` 1, so deleting the catalog on
@@ -441,7 +452,11 @@ CatalogOp {
 - Entries a departed device added stay in the group. Leaving removes the
   device, not its files.
 - Bounds: 1 KiB per path, 64 segments, the Spirit name rules for each segment,
-  and 256 KiB per exchange batch.
+  and 256 KiB per exchange batch. There is also a maximum `seq` per author and
+  generation, and a maximum number of live entries per group, at or below
+  Spirit's 65,536-hash share limit. Operations beyond a bound are refused the
+  same way on every device. Names also exclude format and bidi-override
+  characters, `\`, `.` and `..`.
 
 Signed authorship adds little work now. It keeps "added by" honest when
 operations are relayed by other members, and any later permission model needs it.
@@ -523,10 +538,10 @@ after that Spirit2 PR merges.
 | S1 | spirit2 | [#10](https://github.com/abysl/spirit-library2/pull/10)–[#13](https://github.com/abysl/spirit-library2/pull/13), four stacked PRs that split [#9](https://github.com/abysl/spirit-library2/pull/9) with an identical final tree: cooperative leave and rejoin for the single mesh, with review fixes including a per-mesh `departed` map | — |
 | D1 | afm | This implementation plan and the spec alignment with #9 | — |
 | S2 | spirit2 | [#14](https://github.com/abysl/spirit-library2/pull/14)–[#22](https://github.com/abysl/spirit-library2/pull/22), nine stacked PRs. **Multi-group node core (Rust):** `meshes` map beside #9's `departed` map, migration from the single-mesh state, per-mesh routing on `pair/2`, `mesh/2` and `depart/1`, the heartbeat across all groups, limits (64 groups, 256 admissions per mesh), and isolation tests. The CLI stays usable with several meshes: `status` and `mesh members` list every mesh, and `mesh add` and `mesh leave` take `--mesh`. The FFI stays single-mesh with a clear error, because AFM pins only S3 | S1 |
-| S3 | spirit2 | **Bindings and sessions:** the multi-mesh FFI, the `MeshNode` contract, splitting `PairingSession` into node-wide and per-group sessions, and the binding sections of Spirit's `wiki/design/nodes.md` and `kmp/README.md` (S2 already rewrote the node design) | S2 |
-| A1 | afm | **Groups home:** pin S3; groups list, New group, Join a group (this device's QR), and showing an existing mesh as a group | S3 |
-| A2 | afm | **Members:** member presence, Add device into the selected group (Android scanner), and Paste code on desktop | A1 |
-| A3 | afm | **Leave group:** menu action and confirmation on every platform, replacing [AFM #13](https://github.com/abysl/afm/pull/13)'s single-mesh leave | A2 |
+| S3 | spirit2 | **Bindings and session:** the multi-mesh FFI, the `MeshNode` contract, one `MeshSession` with group-scoped actions, and the binding sections of Spirit's `wiki/design/nodes.md` and `kmp/README.md` (S2 already rewrote the node design) | S2 |
+
+The remaining Spirit2 and AFM work is planned in the
+[groups and file-sharing MVP](#groups-and-file-sharing-mvp).
 
 For each PR:
 
@@ -539,16 +554,63 @@ For each PR:
 Each PR's description records which checks ran and what remains unverified,
 such as physical devices, real relays, and mixed-version meshes.
 
+### Groups and file-sharing MVP
+
+The maintainer asked for a stripped-down MVP of groups and file sharing ahead
+of the roadmap's stage gates. It keeps this design's isolation, catalog and
+authorization rules, and leaves out everything a first shared drive can do
+without.
+
+**In scope:**
+
+- **Groups:** list, create, show this device's QR, add a device into a chosen
+  group (scan on Android, paste everywhere), members with presence, and leave.
+- **Files:** a flat list per group. Any member can add a file through the system
+  picker and remove any entry. Members download a file, then open or save it.
+- **Catalog:** signed `Add` and `Remove` operations per group, synced by version
+  vectors over the app channel and relayed transitively, as in
+  [Catalog model](#catalog-model).
+- **Transfer:** whole-file, streaming, BLAKE3-verified and atomic, with progress
+  and cancel. The provider is the entry's author if it is online, then any
+  other online member.
+
+**Left out:** folders, rename and move, retention levels, eviction, capacity
+warnings, resumable transfers, per-group identities, member removal, and
+platforms other than Android and Linux desktop.
+
+**Simplifications:**
+
+- **One session.** A single `MeshSession` with group-scoped actions replaces
+  the node-wide and per-group session split.
+- **Share sets live in memory.** AFM sets each group's share set from its
+  catalog at startup and on every change, so nothing about sharing is
+  persisted in Spirit.
+- **One blob store.** The running node owns the device's blob store, and one
+  process owns both.
+- **Android files.** Android content URIs stream through `import_reader` and
+  are exported through the system save dialog. No filesystem path is assumed.
+
+| # | Repo | PR | Depends on |
+|---|---|---|---|
+| S3 | spirit2 | Multi-mesh FFI and Kotlin contract, `MeshSession`, demo | #22 |
+| S4 | spirit2 | Streaming, verified, atomic blob store: import from path or reader, export, verified writes | #22 |
+| S5 | spirit2 | Node-owned store, in-memory share sets, and `spirit/blob/1` mesh-scoped fetch with progress and cancel | S4 |
+| S6 | spirit2 | `spirit/app/1` mesh-scoped app channel and app signatures | #22 |
+| S7 | spirit2 | FFI and Kotlin bindings for S4–S6 | S3, S5, S6 |
+| A1 | afm | Pin Spirit; groups home, create, QR, add device, members, leave | S3 |
+| A2 | afm | Catalog: operations, persistence, sync over the app channel, share-set reconciliation | S7, A1 |
+| A3 | afm | Files UI: list, add, remove, download, open and save, transfer states | A2 |
+
+The same worker, reviewer and 800-line rules apply to every PR above.
+
 ### Later milestones
 
-These follow A3. They depend on the roadmap's stage 1 gate and on SPIRIT-05
-transfer work, and they are planned into PRs once A3 lands:
+These follow the MVP. They depend on the roadmap's stage 1 gate and are planned
+into PRs once the MVP lands:
 
-1. **Catalog UX against a fake backend:** roadmap stage 2 with per-group file
-   trees.
-2. **Spirit2 app requests, application signatures, share sets, and
-   mesh-scoped fetch:** roadmap stages 3a and 3b.
-3. **Real catalog sync and group-scoped downloads:** roadmap stage 3c.
+1. Folders, rename and move in the catalog.
+2. Retention levels, eviction and capacity.
+3. Resumable and multi-source transfers.
 
 ## Acceptance checks
 
