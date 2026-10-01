@@ -182,4 +182,6 @@ devenv shell -- idea .
 
 Quit existing IntelliJ processes before using this command. The project-local IntelliJ settings use the Gradle wrapper and the devenv-provided Gradle JVM.
 
+The root build applies the Gradle `idea` plugin to exclude `.devenv/` from the IntelliJ module. Its `profile` and `gc` entries are symlinks into the Nix store, and IntelliJ follows them, so without the exclusion a Gradle sync indexes the whole devenv toolchain (tens of thousands of files) and can exhaust the IDE heap.
+
 `generate-bindings` and the native build commands compile the sibling Rust workspace and write generated bindings or Android JNI libraries into ignored SDK directories. The JVM SDK package embeds the release native library as a JNA classpath resource; Android consumes the JNI library and JNA AAR.
